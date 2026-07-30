@@ -1,0 +1,16 @@
+## ide
+**/.idea
+*.iml
+
+## backend
+**/target
+**/logs
+
+## front
+**/*.lock
+
+## python
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd

@@ -1,0 +1,14 @@
+{
+  "name": "jeecg-skills-marketplace",
+  "owner": {
+    "name": "Ivan Nogueira",
+    "email": "ivan.nogueira@doublecheck.com.br"
+  },
+  "plugins": [
+    {
+      "name": "jeecg-claude-skills",
+      "source": "./",
+      "description": "Suite de skills para JeecgBoot: dispatcher /jeecg + code generation, Online Forms/Reports/Charts, Form Designer, BPMN/Flowable, JiMu Report, BI big screens e dashboards."
+    }
+  ]
+}

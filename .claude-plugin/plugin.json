@@ -1,0 +1,20 @@
+{
+  "name": "jeecg-claude-skills",
+  "description": "Suite de skills para JeecgBoot: dispatcher /jeecg + code generation, Online Forms/Reports/Charts, Form Designer, BPMN/Flowable, JiMu Report, BI big screens e dashboards.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Ivan Nogueira",
+    "email": "ivan.nogueira@doublecheck.com.br"
+  },
+  "keywords": [
+    "jeecg",
+    "jeecgboot",
+    "low-code",
+    "codegen",
+    "bpmn",
+    "flowable",
+    "jimureport",
+    "dashboard",
+    "bi"
+  ]
+}

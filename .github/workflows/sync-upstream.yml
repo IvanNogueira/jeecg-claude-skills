@@ -1,0 +1,74 @@
+name: Sync upstream skills
+
+on:
+  schedule:
+    # Diariamente às 06:00 UTC (03:00 BRT)
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run sync script
+        run: |
+          chmod +x scripts/sync-upstream.sh
+          ./scripts/sync-upstream.sh
+
+      - name: Check for changes
+        id: diff
+        run: |
+          if [[ -n "$(git status --porcelain)" ]]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Alterações detectadas:"
+            git status --short | head -50
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Nenhuma alteração — upstream já sincronizado."
+          fi
+
+      - name: Guard — skills próprias devem existir
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          for own in jeecg lobehub-mcp; do
+            if [[ ! -f "skills/$own/SKILL.md" ]]; then
+              echo "::error::skill própria '$own' desapareceu após o sync — abortando."
+              exit 1
+            fi
+          done
+          echo "OK: skills próprias preservadas."
+
+      - name: Guard — nenhum segredo vazado
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          if grep -rIEq 'f5cf6d9e-3a62-4f0f-a235-e6d7c21b240b|dd05f1c54d63749eda95f9fa6d49v442a|192\.168\.[0-9]+\.[0-9]+' skills/; then
+            echo "::error::segredo ou IP interno encontrado após sanitização — abortando."
+            grep -rIEn 'f5cf6d9e-3a62-4f0f-a235-e6d7c21b240b|dd05f1c54d63749eda95f9fa6d49v442a|192\.168\.[0-9]+\.[0-9]+' skills/ | head -20
+            exit 1
+          fi
+          echo "OK: nenhum segredo detectado."
+
+      - name: Create pull request
+        if: steps.diff.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: chore/sync-upstream
+          title: 'chore: sincronizar skills do upstream jeecgboot/skills'
+          commit-message: 'chore: sincronizar skills do upstream jeecgboot/skills'
+          body: |
+            Sincronização automática das skills oficiais de
+            [jeecgboot/skills](https://github.com/jeecgboot/skills).
+
+            As skills próprias (`jeecg`, `lobehub-mcp`) foram preservadas e a
+            sanitização de segredos foi reaplicada. Detalhes da procedência em
+            `UPSTREAM.json`.
+
+            > Revise o diff antes de fazer merge.
+          delete-branch: true
