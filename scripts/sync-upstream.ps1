@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Sincroniza as skills oficiais de github.com/jeecgboot/skills preservando as customizações locais.
 
@@ -23,6 +23,15 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $skillsDir = Join-Path $repoRoot 'skills'
 
+# robocopy sinaliza sucesso com exit codes 0-7 (8+ = falha real). Wrapper para
+# que esses códigos não sejam tratados como erro pelo chamador.
+function Invoke-Robocopy {
+    param([string]$Source, [string]$Destination)
+    & robocopy $Source $Destination /E /XD '__pycache__' /XF '*.pyc' /NFL /NDL /NJH /NJS /R:1 /W:1 | Out-Null
+    if ($LASTEXITCODE -ge 8) { throw "robocopy falhou ($Source -> $Destination), exit $LASTEXITCODE" }
+    $global:LASTEXITCODE = 0
+}
+
 # Skills próprias — NUNCA sobrescritas pelo upstream.
 $OwnSkills = @('jeecg', 'lobehub-mcp')
 
@@ -30,8 +39,12 @@ $tmp = Join-Path ([System.IO.Path]::GetTempPath()) "jeecg-upstream-$(Get-Random)
 
 try {
     Write-Host "==> Clonando $UpstreamRepo ($Branch)..." -ForegroundColor Cyan
-    git clone --depth 1 --branch $Branch $UpstreamRepo $tmp 2>&1 | Out-Null
-    if (-not (Test-Path $tmp)) { throw "Falha ao clonar o upstream." }
+    # git escreve o progresso em stderr; sem isso o $ErrorActionPreference='Stop'
+    # transformaria a saída normal do clone em erro fatal.
+    & git clone --depth 1 --branch $Branch --quiet $UpstreamRepo $tmp 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path (Join-Path $tmp '.git'))) {
+        throw "Falha ao clonar o upstream (exit $LASTEXITCODE)."
+    }
 
     $upstreamSha = (git -C $tmp rev-parse HEAD).Trim()
     Write-Host "    upstream HEAD: $upstreamSha"
@@ -43,7 +56,7 @@ try {
         $src = Join-Path $skillsDir $own
         if (Test-Path $src) {
             if ($PSCmdlet.ShouldProcess($own, 'backup skill própria')) {
-                robocopy $src (Join-Path $backup $own) /E /NFL /NDL /NJH /NJS /R:1 /W:1 | Out-Null
+                Invoke-Robocopy -Source $src -Destination (Join-Path $backup $own)
             }
         }
     }
@@ -61,7 +74,7 @@ try {
         $target = Join-Path $skillsDir $name
         if ($PSCmdlet.ShouldProcess($name, 'sincronizar do upstream')) {
             if (Test-Path $target) { Remove-Item $target -Recurse -Force }
-            robocopy $_.FullName $target /E /XD '__pycache__' /XF '*.pyc' /NFL /NDL /NJH /NJS /R:1 /W:1 | Out-Null
+            Invoke-Robocopy -Source $_.FullName -Destination $target
         }
         Write-Host "    [ok]   $name"
     }
@@ -73,7 +86,7 @@ try {
             $target = Join-Path $skillsDir $own
             if ($PSCmdlet.ShouldProcess($own, 'restaurar skill própria')) {
                 if (Test-Path $target) { Remove-Item $target -Recurse -Force }
-                robocopy $src $target /E /NFL /NDL /NJH /NJS /R:1 /W:1 | Out-Null
+                Invoke-Robocopy -Source $src -Destination $target
             }
             Write-Host "    [keep] $own (preservada)" -ForegroundColor Green
         }
@@ -126,7 +139,7 @@ try {
     # --- 5. Sanitização ----------------------------------------------------
     Write-Host "==> Sanitizando segredos e caminhos locais..." -ForegroundColor Cyan
     $exts = @('.md', '.py', '.json', '.ts', '.ftl', '.txt', '.yml', '.yaml')
-    $sanitized = 0
+    $script:sanitized = 0
     Get-ChildItem $skillsDir -Recurse -File -Force |
         Where-Object { $exts -contains $_.Extension } |
         ForEach-Object {
@@ -144,7 +157,7 @@ try {
                 $script:sanitized++
             }
         }
-    Write-Host "    arquivos sanitizados: $sanitized"
+    Write-Host "    arquivos sanitizados: $($script:sanitized)"
 
     # --- 6. Registra a procedência -----------------------------------------
     @{

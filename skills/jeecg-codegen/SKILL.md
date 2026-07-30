@@ -5,8 +5,6 @@ description: Use when user asks to generate JeecgBoot CRUD code, create a new mo
 
 # JeecgBoot 代码生成器
 
-将自然语言需求转换为 JeecgBoot 全套 CRUD 代码（后端 Java + 前端 Vue3 + 菜单权限 SQL），并支持对已生成模块的增量字段修改。
-
 ## MCP `jeecg-mcp`（可选 / opcional）
 
 本 skill 可选择通过 `jeecg-mcp` MCP server 生成模块（工具：`generateJeecgModule`）。
@@ -24,6 +22,8 @@ description: Use when user asks to generate JeecgBoot CRUD code, create a new mo
 ```
 
 > 安装与发现 MCP server 见 `lobehub-mcp` skill。
+
+将自然语言需求转换为 JeecgBoot 全套 CRUD 代码（后端 Java + 前端 Vue3 + 菜单权限 SQL），并支持对已生成模块的增量字段修改。
 
 ## 主数据复用规则
 

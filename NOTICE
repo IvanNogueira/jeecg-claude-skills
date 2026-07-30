@@ -1,0 +1,26 @@
+jeecg-claude-skills
+Copyright 2026 Ivan Nogueira
+
+This product includes software developed by the JeecgBoot project
+(https://github.com/jeecgboot/skills), licensed under the Apache License,
+Version 2.0.
+
+The following skills under skills/ are derived from jeecgboot/skills and remain
+under the Apache License 2.0:
+
+  jeecg-aiflow, jeecg-bpmn, jeecg-codegen, jeecg-codegen-new, jeecg-desform,
+  jeecg-dev, jeecg-onlchart, jeecg-onlform, jeecg-onlreport, jeecg-system,
+  jimubi-bigscreen, jimubi-dashboard, jimureport
+
+Modifications applied to the derived skills:
+  - Redaction of access tokens, signature secrets and internal IP addresses,
+    replaced with documented placeholders.
+  - Normalization of machine-specific absolute paths to portable equivalents.
+  - Addition of an optional `jeecg-mcp` MCP server configuration section to
+    skills/jeecg-codegen/SKILL.md.
+
+The following skills are original works of this repository:
+
+  jeecg (dispatcher), lobehub-mcp
+
+See UPSTREAM.json for the exact upstream commit currently vendored.
