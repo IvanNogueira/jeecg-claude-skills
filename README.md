@@ -11,17 +11,17 @@ entrada: **`/jeecg`**.
 ## Instalação
 
 ```
-/plugin marketplace add ivan-wind/jeecg-claude-skills
+/plugin marketplace add IvanNogueira/jeecg-claude-skills
 /plugin install jeecg-claude-skills
 ```
 
-> Troque `ivan-wind` pelo owner do repositório caso tenha feito um fork.
+> Troque `IvanNogueira` pelo owner do repositório caso tenha feito um fork.
 
 <details>
 <summary>Instalação manual (sem plugin)</summary>
 
 ```bash
-git clone https://github.com/ivan-wind/jeecg-claude-skills.git
+git clone https://github.com/IvanNogueira/jeecg-claude-skills.git
 cp -r jeecg-claude-skills/skills/* ~/.claude/skills/
 ```
 
@@ -55,7 +55,7 @@ Também é possível chamar uma sub-skill diretamente, ex.: `/jeecg-codegen`.
 | Skill | Função |
 |---|---|
 | `jeecg-codegen` | Geração de CRUD completo (back-end Java + front-end Vue3 + SQL de menu) |
-| `jeecg-codegen-new` | Geração via templates Freemarker, modo paralelo/lote, uniapp |
+| `jeecg-codegen-new` | Geração via templates Freemarker, modo paralelo/lote, uniapp. **Manual:** declara `disable-model-invocation`, use `/jeecg-codegen-new` |
 | `jeecg-aiflow` | Fluxos de IA — orquestração de agentes e nós de LLM |
 | `jeecg-onlform` | Online Form (`cgform`) — tabelas metadata-driven, controles, JS/Java/SQL enhance |
 | `jeecg-onlreport` | Online Report (`cgreport`) — relatórios SQL-driven |
@@ -63,7 +63,7 @@ Também é possível chamar uma sub-skill diretamente, ex.: `/jeecg-codegen`.
 | `jeecg-desform` | Form Designer — formulários drag-and-drop, apps OA com aprovação |
 | `jeecg-bpmn` | BPMN / Flowable — processos, contra-assinatura, subprocessos, gateways |
 | `jeecg-system` | Dados mestres — usuários, papéis, departamentos, dicionários |
-| `jeecg-dev` | Utilitários de desenvolvimento e apoio ao ambiente |
+| `jeecg-dev` | Padrões de código JeecgBoot (`开发规范`) — comentários de rastreio, nomenclatura, convenções de API. **Manual:** use `/jeecg-dev` |
 | `jimureport` | JiMu Report — relatórios Excel, impressão, agrupamento, preenchimento |
 | `jimubi-bigscreen` | Big screens — visualização full-screen, posicionamento absoluto |
 | `jimubi-dashboard` | Dashboards / kanban — grid de 24 colunas, painéis de KPI |
