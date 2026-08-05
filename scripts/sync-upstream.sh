@@ -80,6 +80,9 @@ block = '''
 
 > 安装与发现 MCP server 见 `lobehub-mcp` skill。
 '''
+# Remove o \n final do literal: sem isso o join abaixo produziria uma linha em
+# branco a mais que a versão PowerShell, deixando o repo eternamente "sujo".
+block = block.rstrip('\n')
 
 lines = io.open(path, encoding='utf-8').read().split('\n')
 
@@ -123,12 +126,13 @@ while IFS= read -r -d '' f; do
     "$f"
 done
 
+# Sem timestamp de propósito — ele mudaria a cada execução e faria a Action abrir
+# PR todo dia mesmo sem novidade no upstream. Formato idêntico ao sync-upstream.ps1.
 cat > "$REPO_ROOT/UPSTREAM.json" <<EOF
 {
   "upstream": "$UPSTREAM_REPO",
   "branch": "$BRANCH",
   "commit": "$UPSTREAM_SHA",
-  "syncedAtUtc": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
   "ownSkills": [$(printf '"%s",' "${OWN_SKILLS[@]}" | sed 's/,$//')]
 }
 EOF

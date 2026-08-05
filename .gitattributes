@@ -1,0 +1,4 @@
+# Scripts shell precisam de LF: com CRLF o bash no runner Linux falha com
+# "\r: command not found". Trava o final de linha independente do core.autocrlf
+# de quem clonar em Windows.
+*.sh text eol=lf

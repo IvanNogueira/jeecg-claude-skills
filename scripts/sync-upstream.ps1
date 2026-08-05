@@ -160,13 +160,23 @@ try {
     Write-Host "    arquivos sanitizados: $($script:sanitized)"
 
     # --- 6. Registra a procedência -----------------------------------------
-    @{
-        upstream    = $UpstreamRepo
-        branch      = $Branch
-        commit      = $upstreamSha
-        syncedAtUtc = (Get-Date).ToUniversalTime().ToString('o')
-        ownSkills   = $OwnSkills
-    } | ConvertTo-Json | Out-File (Join-Path $repoRoot 'UPSTREAM.json') -Encoding utf8
+    # Escrito à mão (não via ConvertTo-Json) para sair byte-a-byte igual ao
+    # sync-upstream.sh: mesma ordem de chaves, 2 espaços, LF, UTF-8 sem BOM.
+    # Sem timestamp de propósito — ele mudaria a cada execução e faria a Action
+    # abrir PR todo dia mesmo sem novidade no upstream.
+    $ownJson = ($OwnSkills | ForEach-Object { '"' + $_ + '"' }) -join ','
+    $json = @(
+        '{',
+        "  `"upstream`": `"$UpstreamRepo`",",
+        "  `"branch`": `"$Branch`",",
+        "  `"commit`": `"$upstreamSha`",",
+        "  `"ownSkills`": [$ownJson]",
+        '}'
+    ) -join "`n"
+    [System.IO.File]::WriteAllText(
+        (Join-Path $repoRoot 'UPSTREAM.json'),
+        $json + "`n",
+        (New-Object System.Text.UTF8Encoding($false)))
 
     Write-Host "`n==> Sync concluído. Revise com 'git diff' antes de commitar." -ForegroundColor Green
 }
