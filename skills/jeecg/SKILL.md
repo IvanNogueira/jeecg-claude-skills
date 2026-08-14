@@ -140,3 +140,30 @@ duplicatas.
 Siga **exatamente** o fluxo da sub-skill carregada: pré-condições, ordem dos passos,
 scripts, validações e saídas esperadas. Não omita etapas e não substitua os scripts
 dela por chamadas de API improvisadas.
+
+## Regra transversal — cor e tema (vale para toda sub-skill)
+
+Sempre que a tarefa produzir ou editar **CSS/LESS de tela** (`.vue`, `.less`, template de
+codegen, `<style scoped>`), o projeto `jeecgboot-vue3` exige tema claro **e** escuro
+funcionando.
+
+Regra em uma linha: **escreva a variável, nunca a cor.** Cor literal em `<style>` de tela
+é bug de dark mode — nada de `#fff`, `#fafafa`, `rgba(0, 0, 0, 0.65)`. E nada de vars LESS
+(`@component-background`, `@white`, `@primary-color`): elas são compiladas congeladas no
+tema claro e não reagem ao toggle. Use as CSS vars `--dc-*`, que já carregam o par
+claro/escuro:
+
+- superfície: `--dc-bg`, `--dc-surface`, `--dc-surface-2`, `--dc-surface-3`
+- borda: `--dc-border`, `--dc-border-strong`
+- texto: `--dc-text`, `--dc-text-2`, `--dc-text-3`
+- destaque: `--dc-accent`, `--dc-accent-bg`, `--dc-accent-border`
+- semânticos, em trio `-text`/`-bg`/`-border`: `--dc-success`, `--dc-error`,
+  `--dc-warning`, `--dc-info`
+
+**Os valores ficam no projeto, não aqui.** Leia `src/design/dc-tokens.less` (Glob:
+`**/design/dc-tokens.less`) para ver os tokens existentes e seus pares claro/escuro antes
+de escolher — e antes de criar nome novo. Detalhes do mecanismo em
+[`references/dc-theme-tokens.md`](references/dc-theme-tokens.md).
+
+Faltou um tom? Adicione o token em `src/design/dc-tokens.less` com os dois valores — não
+crie regra `html[data-theme='dark'] .minha-classe` dentro da tela.
