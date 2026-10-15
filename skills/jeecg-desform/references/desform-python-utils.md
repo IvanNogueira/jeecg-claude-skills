@@ -13,7 +13,7 @@
 | `create_form(name, code, widgets, ...)` | 一站式创建表单（查找/创建→保存设计→同步权限） |
 | `update_form(code, widgets, ...)` | 整体重设计已有表单 |
 | `update_design_config(code, config_updates)` | 只改配置不改控件（发布/通知/打印/业务规则等） |
-| `copy_form(source_code, new_code)` | 复制已有表单 |
+| `copy_form(source_code)` | 复制应用内的工作表（同前端「复制工作表」），新编码自动生成 |
 | `delete_form(code_or_id)` | 删除表单（逻辑+物理） |
 | `query_form(code)` | 查询表单完整信息（含设计JSON） |
 | `get_form_id(code)` | 获取表单 ID 和 updateCount |
@@ -154,6 +154,39 @@ update_form(code, widgets, title_index=0, config_overrides=None) -> (form_id, ti
 # config_overrides: 仅需覆盖 config 时使用；若只改 config 不改控件，优先用 update_design_config
 ```
 
+### ⚠️ 批量修改组件属性：必须递归遍历（实测教训）
+
+用 `update_form` 全量替换时，若需批量修改每个组件的属性（如 `hiddenOnAdd`/`hidden`/`disabled`），**必须递归遍历组件树**——组件可能嵌套在容器（card 的 `list[]`、tabs 的 panes 等）内部，只遍历顶层 `obj['list']` 会漏掉嵌套字段。
+
+**实测案例（2026-08-13）**：表单"全组件校验"顶层 33 个组件中 31 个是 card 容器，真实字段（名称/数字/日期/自动编号等 29 个）全部嵌套在 card 的 `list[0]` 里。只遍历顶层设置 `hiddenOnAdd=true`，29 个嵌套字段全部遗漏，验证时也只看顶层同样发现不了；用户手工设置自动编号时才暴露。
+
+**正确做法**：递归遍历所有含 `model` 的节点，修改后**验证也必须递归**（同样的 walk 检查所有嵌套组件），否则遗漏不可见：
+
+```python
+def walk(node):
+    opts = node.get('options') or {}
+    if isinstance(opts, dict):
+        opts['hiddenOnAdd'] = True   # 目标修改
+    for k, v in node.items():
+        if isinstance(v, list):
+            for child in v:
+                if isinstance(child, dict) and 'model' in child:
+                    walk(child)
+        elif isinstance(v, dict):
+            for v2 in v.values():
+                if isinstance(v2, list):
+                    for child in v2:
+                        if isinstance(child, dict) and 'model' in child:
+                            walk(child)
+
+for w in widgets:
+    walk(w)
+```
+
+### ⚠️ hiddenOnAdd 与 hidden 是独立开关
+
+设置"新增时隐藏"只改 `options.hiddenOnAdd=true`。实测发现组件的 `options` 里可能同时存在 `hidden=true`（彻底隐藏）——用户只要求新增时隐藏时，必须**显式把 `hidden` 设为 `false`**，否则组件在所有场景都隐藏。验证标准：所有组件 `hiddenOnAdd=true` 且 `hidden=false`。
+
 ---
 
 ## update_design_config
@@ -198,10 +231,13 @@ update_design_config('my_form', {"bizRuleConfig": [...]})
 ## copy_form
 
 ```python
-copy_form(source_code, new_code=None) -> dict
-# 复制已有表单设计为新表单
-# new_code 不传时后台自动生成编码
-# 适合基于现有表单快速创建相似表单
+copy_form(source_code, new_code=None, app_id=None) -> dict
+# 复制应用内的工作表，与前端「复制工作表」一致：POST /online/lowAppMenu/copy
+# 表单设计、视图、按钮等配置一并复制；新菜单名「原名-复制」，新编码由后端自动生成
+# 返回 {menuId, menuName, desformCode, formId, appId}
+# 源表单必须挂在应用菜单下，否则报 RuntimeError；new_code 不支持，传了报 ValueError
+# app_id 不传时取表单的 lowAppId，再取 init_lowapp 的当前应用
+# ⚠️ 2026-10-14 起 /desform/api/copyDesignForm 改为微服务内部接口，单体下不存在，不要直接调
 ```
 
 ---
@@ -228,6 +264,10 @@ add_widget(code, widget_or_widgets)
 
 update_widget(code, changes_dict, *, key=None, model=None)
 # 修改指定控件的属性，key 和 model 必须显式指定其一，优先传 key（用 model 定位有时会报"组件不存在"）
+#
+# ⚠️ 【强制】修改前先确认目标属性是否是组件选项（即 options 里的字段）。如果是，必须套
+#   {"options": {...}}，否则会导致后端静默失败——字段被错误地设置到了顶层而不是 options 子层！
+#
 # changes_dict: {"name": "新名称", "options": {"required": True}}
 # 示例：update_widget('my_form', {'options': {'required': True}}, key=fields['姓名']['key'])
 

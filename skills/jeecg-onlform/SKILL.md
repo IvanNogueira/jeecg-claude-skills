@@ -22,6 +22,8 @@ description: >-
 
 > **重要：本 skill 处理「Online 表单」（元数据驱动，运行时 CRUD），不涉及「设计器表单」（desform）。两者是完全独立的表单体系。**
 
+> ⚠️ **目标判定（2026-09-03 实测防再犯）：文字 ≠ URL。** 用户话术含「租户 + 应用 + 表单/工作表」和「新增时隐藏/隐藏标题」等面板属性词 → 目标是**敲敲云（lowApp）工作表**，走 jeecg-lowcode-lowapp，即使同一请求贴了 Online/jmreport URL。jmreport `generateTemplateByOnline?onlineId=…` 里的 onlineId 是某 Online 表的 headId（只佐证它配过打印模板），URL 内 `token=` 是 jmreport 会话令牌，不能当 API 令牌（会 401）——贴了这个 URL 不代表用户要操作该 Online 表。按文字锁目标，禁止凭 URL 误入本技能。
+
 ## 选择正确的技能
 
 | 用户需求 | 应使用的技能 |
@@ -159,7 +161,8 @@ skill 已提供 `onlform_creator.py` / `onlform_jimureport.py` 等脚本，它�
   仅在字典编码**明显是业务自定义**且不确定是否创建过时才发 `sys/dict/list` 查询。
 
 - **❌ 严禁拼造 `/sys/dict/queryDictItemsByCode/{code}` 这种 RESTful 风格的字典查询路径**：后端根本没有这个端点，会返回 `"路径不存在，请检查路径是否正确"`。
-  - 正确的「按 dictCode 直接拿字典项」接口是 `GET /sys/api/queryDictItemsByCode?code={dictCode}`（`code` 走 query 串，不是 path variable）。
+  - 「按 dictCode 直接拿字典项」的前端接口是 `GET /sys/dict/getDictItems/{dictCode}`，但需要 `X-Sign` 签名；不想处理签名就用下面的两步法。
+  - ⚠️ `/sys/api/queryDictItemsByCode` 是微服务内部接口，2026-10-14 起单体模式下不存在，不要再用。
   - 但对上表中的内置字典，**仍然不要调用任何接口**——直接用固化值。
   - 业务自定义字典优先走 `sys/dict/list?dictCode=xxx` + `sys/dictItem/list?dictId={id}` 两步法（见 `references/onlform-data-crud.md`）。
 
@@ -190,7 +193,8 @@ JeecgBoot 后端的 context path 因部署而异：
 
 **「路径不存在」也可能是接口路径本身写错了**（context path 没问题，但端点本身后端没有）。常见反例：
 - ❌ `/sys/dict/queryDictItemsByCode/{code}` —— 路径 + 风格全错，后端没有这个端点
-- ✅ 正确：`GET /sys/api/queryDictItemsByCode?code={code}`（注意是 `/sys/api`，参数走 query）
+- ❌ `/sys/api/queryDictItemsByCode?code={code}` —— 微服务内部接口，单体下不存在（2026-10-14 起）
+- ✅ 正确：`sys/dict/list?dictCode=xxx` + `sys/dictItem/list?dictId={id}` 两步法；或带签名调 `GET /sys/dict/getDictItems/{dictCode}`
 
 排查顺序：先按 context path 加/去 `/jeecg-boot` 重试；仍然 404 时，回到 SKILL 文档/references 里复核接口路径——**不要凭印象拼 RESTful 风格的 URL**。
 
@@ -214,22 +218,58 @@ for tbl, hid in [('t1','id1'), ('t2','id2')]:
     fields.sort(key=lambda f: f.get('orderNum', 999))
 ```
 
-### 7. 建表时必须加日期后缀，避免冲突重试链
+### 7. 建表命名：简洁优先，仅冲突时加短后缀（🔴 禁止自动加日期后缀）
 
 > **历史教训**：`dept_info` 冲突 → 改名 dept_info_1 → 子表再次冲突 → 再改名 → 额外更新 subTableStr，三步重试链浪费 ~50s。
+> **🔴 2026-08-05 用户反馈**：自动加 `业务名_YYYYMMDD` 日期后缀（如 `leave_apply_20260805`）表名冗长难记，明确禁止。
 
-**强制规则：** 从用户描述推导业务表名后，立即拼上当日日期后缀再写入 config JSON，无需查重，直接创建。
+**强制规则：** 直接用**纯业务名**（不加日期后缀），遇到 `数据库表[xxx]已存在` 错误时，用**短序号后缀** `xxx_1` → `xxx_2` 递增重试，禁止加 `_YYYYMMDD` 日期后缀。
 
 ```
-# 格式：业务名_YYYYMMDD
-dept_info_20260509      ← 主表
-dept_archive_20260509   ← 一对一子表
-dept_employee_20260509  ← 一对多子表
+# ✅ 首选（不加后缀）
+dept_info                ← 主表
+dept_archive             ← 一对一子表
+dept_employee            ← 一对多子表
+
+# ⚠️ 冲突时（仅当 addAll 报已存在）
+dept_info_1              ← 短序号后缀
+dept_employee_1
 ```
 
-- 日期后缀保证全局唯一，彻底跳过自动重试逻辑
-- 子表同步加后缀，保持命名一致性
+- 业务名优先简洁可读，禁止为"保证唯一"而堆砌日期/时间戳
+- `onlform_creator.py` 已内置 `_1`/`_2` 自动重试并同步子表 `mainTable` 引用，无需手动干预
+- 子表与主表后缀保持一致
 - 完成后在汇总中告知用户实际表名
+
+### 7.5 字段排序规则：系统字段放业务字段下方（🔴 强制）
+
+> **历史教训**：2026-08-05 用户反馈：通过 skills 创建的 Online 表单，数据库属性页里 `create_by`/`create_time`/`update_by`/`update_time`/`sys_org_code` 等系统字段排在业务字段上方，查看和编辑时很不方便。
+
+**强制规则：** `onlform_creator.py` 创建表单时，字段顺序必须按以下规则排列：
+
+1. **主键 `id` 始终排在第一位**
+2. **业务字段紧跟 `id`**（按用户给出的字段顺序）
+3. **系统字段放到业务字段后面**：`create_by` / `create_time` / `update_by` / `update_time` / `sys_org_code`
+4. **树表 `has_child` 始终放在业务字段最后**
+5. **子表外键字段（`{mainTable}_id`）作为隐藏字段，排在业务字段后面**
+
+**效果示例：**
+
+```
+# ✅ 正确顺序
+1  id
+2  applicant          ← 业务字段
+3  apply_date
+4  expense_type
+5  total_amount
+6  create_by          ← 系统字段
+7  create_time
+8  update_by
+9  update_time
+10 sys_org_code
+```
+
+> 该规则已写入 `scripts/onlform_creator.py` 的 `build_fields_from_config()`，所有通过本 skill 新建的 Online 表单自动遵守。
 
 ### 8. 所有临时 JSON 配置在一个 Python 脚本里批量写入
 
@@ -442,6 +482,28 @@ with open(config_path, 'w', encoding='utf-8') as f:
 | 造数据/插入/查询/导出 | 数据操作 → Step 11 | `onlform_data.py` |
 | 挂载菜单/加到菜单/预览地址/缓存路由 | 菜单挂载 → Step 12 | `onlform_menu.py` |
 
+### Step 0.5: 🔴 区分表单与视图（表名含 `$N` 后缀 = 视图，不是表单！）
+
+**现象**：用户说"视图"或表名含 `$N`（如 `all_ctrl_demo_20260703$2`），AI 却忽略 `$N` 后缀直接查原表名（去掉 `$N`），在原表上操作。
+
+**根因**：`$` 在 shell 中有特殊含义，AI 下意识去掉后缀去查"干净"的表名，但 `$N` 正是视图的标识。
+
+**规则**：
+- 表名含 `$N` 后缀（N=1,2,3...）→ **这是视图，不是原表单**，必须用精确表名查询
+- 视图有**独立的 headId**，`physicId` 指向原表
+- 视图查询：`GET /online/cgform/head/list?copyType=1&physicId={原表headId}` 或用精确 tableName 查
+- 视图与原表**共享数据**但**权限配置独立**——在视图上配权限不影响原表，反之亦然
+- 用户说"视图"就操作视图的 headId，说"表单"就操作原表的 headId
+
+**正确流程**：
+```
+1. 用户给的表名含 $N → 直接用精确表名查 head/list?tableName=xxx$N
+2. 查不到 → 通过 copyType=1&physicId={原表headId} 列出所有视图
+3. 找到视图 headId → 所有后续操作（字段编辑/权限/增强）都用视图的 headId
+```
+
+> **历史教训**：用户说"online表单视图名称为 all_ctrl_demo_20260703$2 授权限"，AI 搜索 `all_ctrl_demo_20260703`（去掉了 `$2`）找到原表，在原表上配了权限。用户纠正后才发现 `$2` 是视图标识，视图 headId 完全不同，需重新在视图上操作。
+
 ### Step 1A: 新增表单 — 解析需求
 
 从用户描述中提取：
@@ -621,6 +683,9 @@ python <skill目录>/scripts/onlform_jimureport.py --api-base <URL> --token <TOK
 
 脚本自动完成 8 步：创建报表 → 保存空模板 → 解析字段 → 检查编码 → 保存数据源 → 获取模板 → 写入引用 → 关联表单。
 
+> **图片/日期字段自动处理**：脚本按控件类型（fieldShowType + fieldExtendJson.picker）自动处理单元格——图片控件（`image`）值单元格加 `display:"img"` 渲染为图片（否则只显示 URL 文字）；普通日期控件（`date` 且无 picker）值单元格引用样式 `format:"date"` 只显示日期 `yyyy/MM/dd` 去掉时分秒；**年/月/周/季度 picker 变体的 date 控件保持原值**（API 已返回显示值如 `2029`、`2026-34周`，套格式会渲染成 1970/01/01）。`datetime`/`time`/`file` 控件保持原值。
+> **⚠️ 日期禁止用 `=DATE_STR()` 表达式**：字段值为空串时表达式抛异常，整表报「渲染失败」（已实测踩坑）；必须用原生单元格格式 `format:"date"`（空值安全）。
+
 > **前提条件**：Online 表中至少存在一条记录，否则字段解析不出来。
 > **积木报表 API 详细说明参见：** `references/onlform-jimureport.md`
 
@@ -661,6 +726,11 @@ python <skill目录>/scripts/onlform_auth.py --api-base <URL> --token <TOKEN> --
 - `query` — 查询所有权限配置
 
 > **权限配置详细参考参见：** `references/onlform-auth.md` 和 `references/onlform-misc.md`
+> **🔴 启用字段权限前必须先过滤隐藏字段！** 用户说"字段全部启用"时，不能无脑把所有字段都开权限。必须先用 `listByHeadId` 查出每个字段的 `isShowList` 和 `isShowForm`，只对 **列表或表单上实际可见的字段**（`isShowList=1` 或 `isShowForm=1`）启用权限。反之，**两个都是 0 的字段**（`isShowList=0 AND isShowForm=0`）在页面上完全不显示，不应纳入字段权限控制。常见需要跳过的：`id`/`create_by`/`create_time`/`update_by`/`update_time`/`sys_org_code`/`has_child`。注意：`pid`（父节点）虽然列表不可见（list=0），但表单上可见（form=1），**不能**跳过——判断标准是 AND 不是 OR。
+> **历史教训**：给 `tree_ctrl_demo_20260706_1$1` 视图"字段全部启用"时，无脑开了全部 39 个字段；用户指出 id 等隐藏字段不该出现后，又错误地把 `pid`（form=1）也关了，用户再次纠正"页面上是有父节点的"。正确做法：`listByHeadId` → 只过滤 `isShowList=0 AND isShowForm=0` → 其余全部启用。
+>
+> **🔴 "授权" ≠ "创建"，数据权限必须先查已有规则再授权！** 用户说"给 XX 授权数据权限"时，意思是把**已有的**数据规则授权给角色/部门/用户，不是创建新规则。必须先 `GET /online/cgform/api/authData/{cgformId}` 查现有规则 → 找到目标规则 → `POST roleDataAuth` 授权。只有当用户**明确说**"创建数据权限规则"或现有规则不满足需求时，才新建规则。否则会造成重复规则，且用户看到新增了规则会觉得 AI 多此一举。
+> **历史教训**：用户说"为 tree_ctrl_demo_20260706_1 授权数据权限，jeecg用户只能看单选框为男的数据"，我直接 `POST authData` 新建了一条规则再授权，而基础表上已有规则"只能看单选框为男的数据"。正确做法：先 `GET authData` → 找到已有规则 → 直接 `POST roleDataAuth` 授权。
 
 ### Step 11: 数据操作
 

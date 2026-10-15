@@ -13,7 +13,10 @@ config.json 格式:
     "reportName": "客户表打印",
     "fields": [                // 可选，不提供则自动从 Online 表单查询
       {"fieldName": "customer_name", "fieldText": "客户名称"},
-      {"fieldName": "phone", "fieldText": "联系电话"}
+      // 可附带 fieldShowType 控件类型，触发单元格特殊处理：
+      //   image → 图片渲染；date → 去掉时分秒只显示日期
+      {"fieldName": "pic_url", "fieldText": "图片", "fieldShowType": "image"},
+      {"fieldName": "birthday", "fieldText": "生日", "fieldShowType": "date"}
     ]
   }
 
@@ -128,8 +131,20 @@ def resolve_head_id(api_base: str, token: str, config: dict) -> tuple[str, dict]
         sys.exit(1)
 
 
+def _extract_picker(field: dict) -> str:
+    """从 fieldExtendJson 提取日期控件 picker 类型（year/month/week/quarter），无则返回 ''"""
+    ext_json = field.get('fieldExtendJson') or ''
+    if not ext_json:
+        return ''
+    try:
+        obj = json.loads(ext_json) if isinstance(ext_json, str) else ext_json
+        return obj.get('picker') or ''
+    except (json.JSONDecodeError, TypeError, AttributeError):
+        return ''
+
+
 def query_online_fields(api_base: str, token: str, head_id: str) -> list[dict]:
-    """查询 Online 表单字段列表，返回 [{fieldName, fieldText}]"""
+    """查询 Online 表单字段列表，返回 [{fieldName, fieldText, fieldShowType, picker}]"""
     system_fields = {'id', 'create_by', 'create_time', 'update_by', 'update_time', 'sys_org_code'}
     try:
         r = api_request(api_base, token,
@@ -142,7 +157,9 @@ def query_online_fields(api_base: str, token: str, head_id: str) -> list[dict]:
                     continue
                 if str(f.get('isShowList', '1')) == '0' and str(f.get('isShowForm', '1')) == '0':
                     continue
-                fields.append({'fieldName': db_name, 'fieldText': f.get('dbFieldTxt', db_name)})
+                fields.append({'fieldName': db_name, 'fieldText': f.get('dbFieldTxt', db_name),
+                               'fieldShowType': f.get('fieldShowType', ''),
+                               'picker': _extract_picker(f)})
             return fields
     except Exception as e:
         print(f'  查询字段列表异常: {e}')
@@ -161,7 +178,9 @@ def query_online_fields(api_base: str, token: str, head_id: str) -> list[dict]:
             db_name = f.get('dbFieldName', '')
             if db_name in system_fields:
                 continue
-            all_fields.append({'fieldName': db_name, 'fieldText': f.get('dbFieldTxt', db_name)})
+            all_fields.append({'fieldName': db_name, 'fieldText': f.get('dbFieldTxt', db_name),
+                               'fieldShowType': f.get('fieldShowType', ''),
+                               'picker': _extract_picker(f)})
         total = (r.get('result') or {}).get('total', 0)
         if page * 500 >= total:
             break
@@ -193,7 +212,32 @@ def build_styles() -> list[dict]:
          "font": {"bold": True, "size": 16}, "bgcolor": "#E6F2FF", "color": "#0066CC"},
         # 6: 数据值左对齐
         {"border": border, "align": "left", "valign": "middle"},
+        # 7: 数据值左对齐 + 日期格式（date 控件用，去掉时分秒，渲染为 yyyy/MM/dd）
+        #    ⚠️ 不能用表达式 =DATE_STR(...) 处理日期：字段值为空串时表达式抛异常，
+        #    整表报"渲染失败"；原生 format 对空值安全（解析失败原样返回）
+        {"border": border, "align": "left", "valign": "middle", "format": "date"},
     ]
+
+
+def _build_value_cell(db_code: str, f: dict) -> dict:
+    """构造值单元格，按控件类型处理显示：
+    - image 控件（图片）→ display="img" 渲染为图片，否则只显示 URL 文字
+    - date 控件（普通日期选择器，picker 为空）→ 引用 style 7（format=date），
+      渲染为 yyyy/MM/dd 去掉时分秒（queryByIdForJmReport 返回原始值
+      "2026-08-26 00:00:00"；不能用 =DATE_STR() 表达式，空值会整表"渲染失败"）
+    - date 控件（picker=year/month/week/quarter）→ 保持原值：API 已返回显示值
+      （如 2029、2026-08、2026-34周、2026-Q4），再套 format 会破坏——
+      纯数字"2029"会被格式函数当作毫秒时间戳渲染成 1970/01/01
+    - datetime（年月日时分秒）/ time（时间）/ file（文件）→ 保持原值文本显示
+    """
+    cell = {"text": f"#{{{db_code}.{f['fieldName']}}}", "style": 6}
+    show_type = f.get('fieldShowType', '')
+    picker = f.get('picker', '')
+    if show_type == 'image':
+        cell['display'] = 'img'
+    elif show_type == 'date' and not picker:
+        cell['style'] = 7
+    return cell
 
 
 def build_card_layout(report_name: str, db_code: str, fields: list[dict]) -> tuple[dict, list[str]]:
@@ -228,11 +272,11 @@ def build_card_layout(report_name: str, db_code: str, fields: list[dict]) -> tup
         cells: dict = {}
         f1 = normal_fields[i]
         cells["0"] = {"text": f1['fieldText'], "style": 3}
-        cells["1"] = {"text": f"#{{{db_code}.{f1['fieldName']}}}", "style": 6}
+        cells["1"] = _build_value_cell(db_code, f1)
         if i + 1 < len(normal_fields):
             f2 = normal_fields[i + 1]
             cells["2"] = {"text": f2['fieldText'], "style": 3}
-            cells["3"] = {"text": f"#{{{db_code}.{f2['fieldName']}}}", "style": 6}
+            cells["3"] = _build_value_cell(db_code, f2)
         else:
             cells["2"] = {"text": "", "style": 3}
             cells["3"] = {"text": "", "style": 6}
@@ -241,10 +285,12 @@ def build_card_layout(report_name: str, db_code: str, fields: list[dict]) -> tup
 
     # 长文本字段（值合并3列）
     for f in long_fields:
+        cell = _build_value_cell(db_code, f)
+        cell["merge"] = [0, 2]
         rows[str(row_idx)] = {
             "cells": {
                 "0": {"text": f['fieldText'], "style": 3},
-                "1": {"text": f"#{{{db_code}.{f['fieldName']}}}", "style": 6, "merge": [0, 2]}
+                "1": cell
             },
             "height": 50
         }

@@ -151,6 +151,26 @@ POST /jmreport/save
 "cols": {"0": {"width": 29}, "len": 51}
 ```
 
+**特殊控件类型单元格（图片/日期）处理规则：**
+
+> **背景**：`queryByIdForJmReport` 返回字段原始值——图片控件返回 URL 字符串（不渲染成图片），日期控件常返回 `2026-08-26 00:00:00`（带时分秒）。必须按控件类型（`fieldShowType`）在单元格上做处理，否则打印页显示异常。
+
+| 控件类型 fieldShowType | picker（fieldExtendJson） | 值单元格写法 | 效果 |
+|------------------------|--------------------------|-------------|------|
+| `image`（图片） | - | `{"text": "#{dc.pic_url}", "style": 0, "display": "img"}` | 渲染为图片，而非 URL 文字 |
+| `date`（日期） | 无 | `{"text": "#{dc.birthday}", "style": 日期格式样式索引}` | 只显示日期 `yyyy/MM/dd`，去掉时分秒 |
+| `date`（年/月/周/季度） | `year`/`month`/`week`/`quarter` | `{"text": "#{dc.year}", "style": 0}` | **保持原值，禁止套格式** |
+| `datetime`（年月日时分秒） | - | `{"text": "#{dc.create_time}", "style": 0}` | 保持原值（时分秒是控件本意） |
+| `time`（时间）/ `file`（文件）/ 其他 | - | `{"text": "#{dc.field}", "style": 0}` | 保持原值文本显示 |
+
+- `display:"img"` 要求字段值为**完整可访问的图片 URL**（如 `http://host/path/xxx.png`），相对路径无法渲染；空值安全（渲染为空白）
+- **日期必须用原生单元格格式，禁止用 `=DATE_STR(#{dc.field},'yyyy-MM-dd')` 表达式**：
+  - `DATE_STR` 对空字符串直接抛异常 → 整表报「渲染失败」（实测：date 控件存在空值的记录时报表无法渲染）
+  - 原生格式做法：styles 数组加一条 `{"format": "date"}`，日期单元格 `style` 引用其下标；渲染器对解析失败的值**原样返回不报错**，空值安全
+  - `format: "date"` 渲染为 `yyyy/MM/dd`（斜杠分隔）。**不支持自定义格式串**（如 `yyyy-MM-dd`）：渲染器按预设 key 查表 `$t.b[o.format]`，未知 key 直接 TypeError 崩溃。可选 key：`date`(yyyy/MM/dd)、`date2`(yyyy年MM月dd日)、`time`、`datetime`、`year`、`month`、`yearMonth`
+- **picker 变体（年/月/周/季度）绝不能套 `format`**：`queryByIdForJmReport` 对带 picker 的 date 控件**已返回转换后的显示值**（实测：年→`2029`、月→`2026-08`、周→`2026-34周`、季度→`2026-Q4`），再格式化会破坏——纯数字 `2029` 会被格式函数当作毫秒时间戳渲染成 `1970/01/01`（实测踩坑）。只有 picker 为空的普通日期才返回原始 `2026-08-26 00:00:00` 需要格式化
+- `onlform_jimureport.py` 的 `build_card_layout()` 已自动应用上述规则（依据字段 `fieldShowType` + `picker`，日期样式固定为 style 7），手工写模板时才需对照此表
+
 **Step 8：将积木报表关联到 Online 表单**
 ```
 PUT /online/cgform/head/edit

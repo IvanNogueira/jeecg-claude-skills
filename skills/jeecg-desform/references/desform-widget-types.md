@@ -38,7 +38,8 @@
 | 关联记录/引用 | `link-record` | 关联其他表单的记录 |
 | 他表字段/自动填充 | `link-field` | 显示关联记录的字段值 |
 | 公式/自动计算 | `formula` | 公式计算（求和/均值/自定义） |
-| 汇总/求和/合计(子表) | `summary` | 子表列汇总 |
+| 汇总/求和/合计(子表) | `summary` | 子表列汇总（数值类聚合，className: form-summary，model前缀: summary_） |
+| 汇总日期/最早日期/最晚日期/日期汇总/日期时间汇总 | `date` + `isSummary: true` | 子表日期列的最早/最晚聚合（className: form-summary-date，model前缀: date_，不可用于子表内部）；通过 options.type 切换 date/datetime |
 | 手写签名/签字 | `hand-sign` | 手写签名 |
 | 大写金额/中文大写 | `capital-money` | 金额转大写 |
 | 文本组合 | `text-compose` | 多字段值拼接显示 |

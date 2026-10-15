@@ -140,7 +140,7 @@ className: `form-money` | icon: `icon-money`
 
 ## ⚠️ 选项颜色（itemColor）合法值约束
 
-**强制规则：** 所有控件（radio / select / checkbox）的 `itemColor` 字段，只能使用以下 20 个合法颜色值，禁止使用任何其他颜色（包括近似色）。这是前端硬编码的颜色表，传入范围外的值会导致颜色显示异常。
+**强制规则：** 所有控件（radio / select / checkbox）的 `itemColor` 字段只能使用以下 20 个值，这是前端硬编码的颜色表，传入**其他任何值都会导致脚本报错**。
 
 | 色号 | 十六进制 | 文字色 | 预览 |
 |------|---------|--------|------|
@@ -165,13 +165,7 @@ className: `form-money` | icon: `icon-money`
 | 19 | `#CCD2F1` | 深色 | 浅靛 |
 | 20 | `#D3D3D3` | 深色 | 浅灰 |
 
-**常见错误示例（禁止使用）：**
-- `#FF9800` ❌ → 应为 `#FF9300`
-- `#9C27B0` ❌ → 应为 `#7500EA`
-- `#F44336` ❌ → 应为 `#F52222`
-- `#795548` ❌ → 无对应值，选最近似色
-
-**启用颜色时还需同时设置 `useColor: true`**，否则颜色配置对甘特图、看板视图等视图不生效。
+**同时必须设置 `useColor: true`**，否则颜色不生效。
 
 ---
 
@@ -875,6 +869,8 @@ className: `form-select-depart` | icon: `icon-gangwei`
 
 className: `form-org-role` | icon: `icon-zuzhijuese`
 
+> ⚠️ `org-role` 存的是 `roleCode`（如 `oa_duty_admin`），不是 `roleId`（UUID）。通过 `GET /sys/role/list` 获取。
+
 ## select-tree — 下拉树
 
 | 参数 | 类型 | 默认值 | 说明 |
@@ -908,6 +904,11 @@ className: `form-select-tree` | icon: `icon-tree`
 - `sys_depart`：根节点 `parent_id` 为空字符串，因此 `rootPid` 必须填 `""`
 - 通用规则：不确定时填 `""`（表示顶级节点），**不要**默认填 `"0"`——填了不存在的值会导致树加载为空
 
+**查询分类树节点（用于设置 defaultValue）：**
+- `GET /sys/category/rootList?code=B04` — 获取指定分类的根节点列表（返回 `result.records`）
+- `GET /sys/category/childList?pid=<节点ID>` — 获取某节点的子节点列表
+- `defaultValue` 格式为数组 `['<节点ID>']`（如 `['1456203592097148930']`），不是字符串
+
 ## ocr — 文本识别
 
 | 参数 | 类型 | 默认值 | 说明 |
@@ -939,8 +940,15 @@ className: `form-ocr` | icon: `icon-ocr-a`
 | 参数 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `linkTable` | string | `""` | 关联的子表 model（sub-table-design 控件的 model） |
-| `field` | string | `""` | 要汇总的子表列 model（如 `money_xxx`、`formula_xxx`） |
-| `summary` | string | `""` | 汇总类型，见下方完整列表（默认为空，需手动指定） |
+| `field` | string | `""` | 子表列 model（如 `money_xxx`）。**例外**：`inner-record-count` 时填 `"inner-record-count"`，见下方 |
+
+> **⚠️ `inner-record-count` 的结构与其他汇总不同：**
+
+| 汇总类型 | `field` | `summary` | 说明 |
+|---------|---------|-----------|------|
+| `inner-record-count` | **`"inner-record-count"`** | **`""`** | 统计子表行数，不引用任何数据列 |
+| 其他所有类型 | 子表列 model | `"inner-sum"` / `"inner-average"` / ... | 引用子表具体列 |
+| `summary` | string | `""` | **值类**：填汇总类型（如 `"inner-sum"`）；**统计类**：填 `""`（留空） |
 | `filter` | object | `(见说明)` | 过滤条件对象，含 `enabled`/`rules`/`matchType`；`enabled: true` 时仅对满足条件的子表行汇总 |
 | `filter.enabled` | boolean | `false` | 是否启用过滤 |
 | `filter.rules` | array | `[]` | 过滤规则数组，每项含 `model`/`rule`/`valueType`/`value` |
@@ -953,7 +961,25 @@ className: `form-ocr` | icon: `icon-ocr-a`
 
 className: `form-summary` | icon: `icon-sigma`
 
-**汇总类型完整列表：**
+> **⚠️ `inner-record-count` 的结构与其他汇总不同：**
+
+| 汇总类型 | `field` | `summary` | 说明 |
+|---------|---------|-----------|------|
+| `inner-record-count` | **`"inner-record-count"`** | **`""`** | 统计子表行数，不引用任何数据列 |
+| 其他所有类型 | 子表列 model | `"inner-sum"` / `"inner-average"` / ... | 引用子表具体列 |
+
+示例：
+```json
+// 普通汇总：对子表"小计"列求和
+{ "field": "formula_xxx", "summary": "inner-sum" }
+
+// inner-record-count：field 填类型字符串，summary 留空
+{ "field": "inner-record-count", "summary": "" }
+```
+
+> **⛔ 重要：`type: "summary"` 不支持日期聚合。** `inner-date-earliest` / `inner-date-latest` **不是** `summary` 控件的合法 summary 值。对日期字段做最早/最晚聚合，必须使用**汇总日期**（`type: "date"` + `isSummary: true`），详见下方「汇总日期」章节。两者是完全不同的控件类型，不可混用。
+
+**汇总类型完整列表（仅 `type: "summary"` 支持）：**
 
 | summary 值 | 说明 | 适用字段类型 |
 |------------|------|-------------|
@@ -961,11 +987,9 @@ className: `form-summary` | icon: `icon-sigma`
 | `inner-average` | 平均值 | 数字/金额/公式 |
 | `inner-max` | 最大值 | 数字/金额/公式 |
 | `inner-min` | 最小值 | 数字/金额/公式 |
-| `inner-record-count` | 记录数量 | 任意（统计子表行数） |
+| `inner-record-count` | 记录数量 | 任意（`field` 特殊，见上方） |
 | `inner-completed-count` | 已填计数 | 任意（统计已填写的行数） |
 | `inner-incompletely-count` | 未填计数 | 任意（统计未填写的行数） |
-| `inner-date-earliest` | 最早日期 | 日期 |
-| `inner-date-latest` | 最晚日期 | 日期 |
 | `oa-leave-duration-calc` | 请假时长（OA 专用） | 请假时间子表 |
 
 **filter 子结构**：
@@ -993,6 +1017,73 @@ className: `form-summary` | icon: `icon-sigma`
 > **脚本自动解析：** JSON 配置中 `model` 和 `value`（当 `valueType: "field"` 时）支持传入字段中文名，脚本会自动解析为实际 model。
 
 > **典型用法：** 主表需要显示子表某列的合计金额时，使用 `SUMMARY(name, sub_table_model, field_model, summary_type='inner-sum')`，不要用 `FORMULA`。
+
+## 汇总日期（date + isSummary: true）
+
+**这不是独立的 widget type**，而是对 `date` 控件的特殊化——`type: "date"` + `isSummary: true`，内部通过 `__summary__date` 前缀注册以区分普通日期选择器。汇总日期仅能对子表/关联记录的日期字段做"最早"和"最晚"两种聚合，**不能用于设计子表内部**。
+
+`options.type` 有两种取值：`"date"`（日期，format 默认 `yyyy-MM-dd`）或 `"datetime"`（日期时间，format 默认 `yyyy-MM-dd HH:mm:ss`）。`name` 由 AI 根据字段用途自行设定。
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `isSummary` | boolean | `true` | **widget 顶层属性，必须为 `true`**，是区分普通日期选择器的唯一标记 |
+| `linkTable` | string | `""` | 关联表 model（仅支持 `sub-table-design` / `link-record` 两种） |
+| `field` | string | `""` | 汇总的目标字段 model，**必须指向日期类型字段**（`date` 或 `oa-leave-date-select`） |
+| `summary` | string | `""` | 汇总方式：**仅 `inner-date-earliest`（最早）或 `inner-date-latest`（最晚）** |
+| `type` | string | `"date"` | options 内的日期显示类型：`"date"` 或 `"datetime"` |
+| `designType` | string | `"date"` | 设计类型，与 `type` 同步 |
+| `format` | string | `"yyyy-MM-dd"` | 日期输出格式（`datetime` 时用 `"yyyy-MM-dd HH:mm:ss"`） |
+| `timestamp` | boolean | `true` | **必须为 `true`**，以时间戳存储汇总结果 |
+| `defaultValue` | string | `""` | 默认值 |
+| `filter` | object | `(见汇总控件)` | 筛选条件对象，结构与普通汇总相同 |
+| `hidden` | boolean | `false` | 是否隐藏 |
+| `hiddenOnAdd` | boolean | `false` | 新增时隐藏 |
+| `fieldNote` | string | `""` | 字段备注 |
+
+className: `form-summary-date` | icon: `icon-sigma` | model 前缀: `date_`
+
+```json
+{
+  "type": "date",
+  "name": "汇总日期",
+  "className": "form-summary-date",
+  "icon": "icon-sigma",
+  "isSummary": true,
+  "options": {
+    "linkTable": "sub_table_design_xxx",
+    "field": "date_xxx",
+    "summary": "inner-date-earliest",
+    "type": "date",
+    "designType": "date",
+    "format": "yyyy-MM-dd",
+    "timestamp": true,
+    "defaultValue": "",
+    "filter": { "enabled": false, "rules": [], "matchType": "AND" }
+  },
+  "key": "1783581543074_744661",
+  "model": "date_1783581543074_744661"
+}
+```
+
+`options.type` 设为 `"datetime"` 时，`designType` 同步为 `"datetime"`，`format` 对应改为 `"yyyy-MM-dd HH:mm:ss"`。
+
+> **关于 JSON config 中的 `"type": "summary-date"`**：这只是 `desform_creator.py` 的语法糖，内部映射到 `SUMMARY_DATE()` 工厂函数，最终生成的控件 type 仍然是 `"date"`（而非 `"summary-date"`）。系统中不存在 type 为 `"summary-date"` 的控件。
+```
+
+**与普通汇总控件的区别：**
+
+| 维度 | 汇总 (`summary`) | 汇总日期 (`date` + `isSummary`) |
+|------|-----------------|-------------------------------|
+| widget type | `"summary"` | `"date"` |
+| className | `"form-summary"` | `"form-summary-date"` |
+| model 前缀 | `summary_` | `date_` |
+| isSummary | 无 | **必须为 `true`** |
+| 可选汇总方式 | sum/avg/max/min/count 等 10 种 | **仅 earliest / latest** |
+| 可选字段类型 | 任意（数值字段才支持 sum/avg/max/min） | **仅日期字段** |
+| 是否有 type/designType/format/timestamp | 无 | **有** |
+| 是否有 defaultValue | 无 | **有** |
+| 输出值 | 数值 | **时间戳** |
+| 子表内可用 | 是 | **否** |
 
 ## sub-table-design — 设计子表
 

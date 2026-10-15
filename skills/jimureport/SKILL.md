@@ -916,6 +916,22 @@ mock_url = create_mock(
 
 **分页规则**：自建 mock 接口**不需要分页**，`data` 直接返回完整数组，不加 pageNo / pageSize 参数。
 
+> **如果用户明确要求 mock 支持分页**（少数场景，如演示「分页 + 字段查询」联动），需用 `set_advmock` 写高级脚本，并严格遵守以下响应字段语义 —— **`total` 是总页数，`count` 才是总条数**，两者不可混用：
+>
+> ```javascript
+> // set_advmock 脚本中：
+> var total = Math.ceil(count / pageSize);   // 总页数（≠ 总条数）
+> mockJson = {
+>   "data": paged,        // 当前页记录数组
+>   "count": filteredLen, // 总条数（过滤后）
+>   "total": total,       // 总页数
+>   "pageNo": pageNo,
+>   "pageSize": pageSize
+> };
+> ```
+>
+> 把总条数赋给 `total` 会导致积木报表分页器总页数显示异常。详见 `references/dataset-core.md` §3.3。
+
 积木报表中使用 mock URL 作为 API 数据集时，调用 `save_db(..., db_type="1", api_url=mock_url)` 即可，`dbCode` 是自定义编码（如 `sales_data`），与 URL 无关。
 
 **API 数据集查询条件传参规则**：见「已知坑点」章节（含代码示例）及 `references/dataset-core.md` § 3.2.2。

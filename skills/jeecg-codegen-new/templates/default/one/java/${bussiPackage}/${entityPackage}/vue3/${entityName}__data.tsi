@@ -435,6 +435,10 @@ export const formSchema: FormSchema[] = [
      valueField: '${po.dictField}',
      textField: '${po.dictText}',
      tableName: '${po.dictTable}',
+     <#if po.extendParams?exists && po.extendParams.imageField?exists>
+     imageField: '${po.extendParams.imageField}',
+     </#if>
+     queryMode: 'table',
      multi: <#if (po.queryMode!"") == "multi">true<#else>false</#if>
     },
    <#else>

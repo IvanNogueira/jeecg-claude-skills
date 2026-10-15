@@ -16,6 +16,9 @@
 <#if need_popup_dict>
       JPopupDict,
 </#if>
+<#if need_link_table>
+      JLinkTableCard,
+</#if>
 <#if need_category>
       JCategorySelect,
 </#if>

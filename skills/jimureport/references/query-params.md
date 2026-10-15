@@ -290,31 +290,165 @@ select * from demo where 1=1
 ]
 ```
 
-### 6.8 JS增强 API
+### 6.8 JS 增强 / CSS 增强（官方文档 jsEnhance.md 全量）
+
+**官方文档**：https://jimureport.com/docs/query/jsEnhance
+
+JS 增强 / CSS 增强用于对**查询区域的条件控件**做事件控制和样式定制，配置位置：
+**设计页面 → 其他设置 → 增强配置**（version 1.3.79+）。
+
+---
+
+#### 6.8.1 JS 增强 — 框架约定
+
+| 约定 | 说明 |
+|------|------|
+| 函数名固定 `init` | **只能定义一个**入口函数，名字必须叫 `init` |
+| `this` 上下文 | `this` 指向报表上下文，可调用各种内置方法 |
+| HTTP 请求 | 使用全局 `$http.metaGet(url, params)`，params 是普通对象 |
+| 返回 Promise | 所有 `$http.metaXxx` 返回 Promise，用 `.then(res => {...})` 接 |
+
+下拉选项数据格式（所有下拉相关 API 通用）：
+```javascript
+[{ value: '001', text: '北京市' }, { value: '002', text: '天津市' }]
+```
+
+---
+
+#### 6.8.2 JS 增强 — API 列表
 
 | 方法 | 用途 |
 |------|------|
-| `updateSelectOptions(dbCode, fieldName, options)` | 动态更新下拉选项 |
-| `onSearchFormChange(dbCode, fieldName, callback)` | 监听控件值变化 |
-| `updateSearchFormValue(dbCode, fieldName, value)` | 设置控件初始值 |
-| `getSelectOptions(dbCode, fieldName)` | 获取当前下拉选项 |
-| `notLoadDataWhenShow()` | 预览时不自动加载数据 |
+| `this.updateSelectOptions(dbCode, fieldName, options)` | 动态更新下拉选项 |
+| `this.onSearchFormChange(dbCode, fieldName, callback)` | 监听控件值变化（回调参数可能是值，也可能是 event 对象） |
+| `this.updateSearchFormValue(dbCode, fieldName, value)` | 设置/修改控件初始值 |
+| `this.getSelectOptions(dbCode, fieldName)` | 获取当前下拉选项数组 |
+| `this.notLoadDataWhenShow()` | 预览时不自动加载数据，需用户手动点查询 |
+| `$http.metaGet(url, params)` | 全局 HTTP GET（用于自定义下拉框数据加载） |
 
-**三级联动下拉示例：**
+---
+
+#### 6.8.3 范围查询的初始值拼接（关键技巧）
+
+`updateSearchFormValue` 给**范围查询**控件设默认值时用 `|` 拼接起止值：
+
+| 控件类型 | 默认值写法 | 示例 |
+|---------|----------|------|
+| 数值范围 | `'起\|止'` | `this.updateSearchFormValue('db', 'salary', '1000\|5000')` |
+| 日期范围 | `'起\|止'`（格式必须与配置的 `searchFormat` 一致） | `this.updateSearchFormValue('db', 'date', '2021-08-01\|2021-08-23')` |
+
+**当前月第一天 ~ 最后一天**的常用代码：
 ```javascript
 function init(){
-  $http.metaGet('<backend_url>/ces/ai/customSelect')
-    .then(res => { this.updateSelectOptions('pca', 'pro', res.data) })
-  this.onSearchFormChange('pca', 'pro', (value) => {
-    $http.metaGet('<backend_url>/ces/ai/customSelect', {pid: value})
-      .then(res => { this.updateSelectOptions('pca', 'city', res.data) })
-  })
-  this.onSearchFormChange('pca', 'city', (value) => {
-    $http.metaGet('<backend_url>/ces/ai/customSelect', {pid: value})
-      .then(res => { this.updateSelectOptions('pca', 'area', res.data) })
-  })
+  var date = new Date();
+  date.setDate(1);
+  var month = date.getMonth() + 1;
+  var day = date.getDate();
+  if (month < 10) month = '0' + month;
+  if (day < 10)   day   = '0' + day;
+  var start = date.getFullYear() + '-' + month + '-' + day;
+
+  var nextMonthFirstDay = new Date(date.getFullYear(), date.getMonth() + 1, 1);
+  var end = new Date(nextMonthFirstDay - 1000 * 60 * 60 * 24);
+
+  this.updateSearchFormValue('dbCode', 'fieldName', start + '|' + end);
 }
 ```
+
+---
+
+#### 6.8.4 JS 增强 — 完整示例
+
+**① 三级联动下拉**（自定义下拉框 + 接口动态加载）
+
+需要把对应字段的 `searchMode` 配置为 `7`（自定义下拉框）。
+
+```javascript
+function init(){
+  // 加载第 1 级下拉
+  $http.metaGet('<backend_url>/ces/ai/customSelect').then(res => {
+    this.updateSelectOptions('pca', 'pro', res.data);
+  });
+  // 监听第 1 级变化，加载第 2 级
+  this.onSearchFormChange('pca', 'pro', (value) => {
+    $http.metaGet('<backend_url>/ces/ai/customSelect', { pid: value }).then(res => {
+      this.updateSelectOptions('pca', 'city', res.data);
+    });
+  });
+  // 监听第 2 级变化，加载第 3 级
+  this.onSearchFormChange('pca', 'city', (value) => {
+    $http.metaGet('<backend_url>/ces/ai/customSelect', { pid: value }).then(res => {
+      this.updateSelectOptions('pca', 'area', res.data);
+    });
+  });
+}
+```
+
+**② 修改查询表单初始值**
+```javascript
+function init(){
+  this.updateSearchFormValue('de', 'sex', '女');
+}
+```
+
+**③ 下拉单选默认选中第一项**（version 1.4.0+）
+```javascript
+function init(){
+  let ops = this.getSelectOptions('de', 'sex');
+  if (ops && ops.length > 0) {
+    this.updateSearchFormValue('de', 'sex', ops[0].value);
+  }
+}
+```
+
+**④ 预览页不自动加载数据**（version 1.6.7+）
+```javascript
+function init(){
+  this.notLoadDataWhenShow();
+}
+```
+
+---
+
+#### 6.8.5 CSS 增强 — 命名规范
+
+| 规则 | 说明 |
+|------|------|
+| 顶层容器类 | `.jm-query-form`（查询表单容器） |
+| iView 按钮基类 | `.ivu-btn-primary`（查询按钮的 Primary 主题） |
+| 定位方式 | F12 调试工具找到目标元素的原生 class，前面拼上 `.jm-query-form` 限定作用域 |
+
+**示例：把查询按钮改成红色背景 + 红色边框**
+```css
+.jm-query-form .ivu-btn-primary {
+  background-color: red;
+  border-color: red;
+}
+```
+
+> ⚠️ 必须加 `.jm-query-form` 前缀限定作用域，否则会污染整个页面的 iView 按钮样式。
+
+---
+
+#### 6.8.6 接口返回示例（自定义下拉框配套后端）
+
+```java
+@GetMapping("/customSelect")
+public List<Map<String, String>> customSelect(
+    @RequestParam(value = "pid", required = false) String pid) {
+    List<Map<String, String>> list = new ArrayList<>();
+    Map<String, String> map = new HashMap<>();
+    if (StringUtils.isEmpty(pid)) {
+        map.put("text", "北京市"); map.put("value", "1001");
+    } else if ("1001".equals(pid)) {
+        map.put("text", "市辖区"); map.put("value", "10011002");
+    }
+    list.add(map);
+    return list;
+}
+```
+
+返回数据格式必须是 `[{text, value}]` 数组（与字典 API 一致）。
 
 ### 6.9 API 参数传递
 

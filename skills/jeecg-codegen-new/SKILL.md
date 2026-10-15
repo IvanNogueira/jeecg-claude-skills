@@ -40,9 +40,9 @@ disable-model-invocation: true
 | 一对多 — Tab-in-Modal | `tab/onetomany` | `vue3` | tab风格 / radio切换 / 标题栏切换 |
 | 一对多 — 内嵌子表 | `inner-table/onetomany` | `vue3` | 内嵌子表 / 行展开 / expandedRowRender |
 | 一对多 — ERP | `erp/onetomany` | `vue3` `vue3Native` | ERP风格 / 独立编辑 |
+| 一对多 — JVxeTable | `jvxe/onetomany` | `vue3` `vue3Native` | JVxe / JVxeTable / 可编辑表格 / 行内编辑 |
 
-> **不支持的组合：** 一对多 + 默认布局（即旧 SKILL 中的"原始布局"）目前没有 vue3 模板，jeecg 官方枚举 `CgformEnum.MANY` 仅支持 vue2。
-> 如果用户要"默认/原始布局"的 vue3 一对多，**改推荐 `tab` 或 `inner-table`**，并向用户说明原因。
+> **不支持的组合：** `default/onetomany` 无 vue3 模板，用户若要此布局改推荐 `tab` 或 `inner-table`。Vue 2 模板均不收录。详见 [template-diff.md](references/template-diff.md)。
 
 ---
 
@@ -272,5 +272,6 @@ ALTER TABLE 写到新的 Flyway SQL（版本号递增）。
 | `references/context-schema.md` | ctx.json 完整 schema |
 | `references/post-edit-recipes.md` | 模板没覆盖的特殊需求改动位置 |
 | `references/dict-matching.md` | 字典匹配规则与 ctx 映射 |
+| `references/template-diff.md` | SKILL 模板与后端源目录的差异记录及原因 |
 
 依赖：`java`（JDK 8+）+ `python3`（3.9+，类型注解用了 PEP 585 语法）。脚本会自动探测 javac 版本：JDK 8 用 `-source 8 -target 8`，JDK 9+ 用 `--release 8`，最终编译产物始终为 Java 8 字节码（major=52）。

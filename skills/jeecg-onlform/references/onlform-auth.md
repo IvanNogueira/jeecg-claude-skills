@@ -89,8 +89,11 @@
 **自定义 SQL 规则**（ruleOperator=`USE_SQL_RULES`）：
 - `ruleColumn` 设为空字符串
 - `ruleValue` 填 SQL 片段（不含 WHERE 关键字）
-- 主表别名 `a`，子表 `b,c,d...`，v3.6.4+ 也可用完整表名
-- 示例：`a.sys_org_code = #{sys_org_code}` 或 `create_by = #{sys_user_code}`
+- 🔴 **单表和树表不需要表别名**，直接写字段名即可
+- 🔴 **SQL 字符串字面量必须用单引号 `'`，不能用双引号 `"`**。双引号在 SQL Server 中是标识符引号（等同于 `[]`），MySQL 虽然兼容但跨数据库不安全。示例：`fcheckbox LIKE '%1%'` ✅，`fcheckbox LIKE "%1%"` ❌（SQL Server 报错）
+- **主子表才需要表别名**：主表 `a`，子表 `b,c,d...`，v3.6.4+ 也可用完整表名
+- 示例：单表 → `create_by = #{sys_user_code}`；主子表 → `a.sys_org_code = #{sys_org_code}`
+- **历史教训**：给 `tree_ctrl_demo_20260706_1`（树表）创建数据规则时加了 `a.` 前缀；后又用了双引号 `LIKE "%1%"` 在 SQL Server 下报错。单表/树表直接写字段名，字符串用单引号。
 
 **常用规则示例**：
 ```json
@@ -271,6 +274,12 @@ GET /online/cgform/api/roleAuth?roleId={targetId}&cgformId={cgformId}&type=2&aut
 4. **authMode 三种**：`role`(角色)、`depart`(部门)、`user`(用户)，targetId 对应不同实体的 ID
 5. **authId 格式**：JSON 字符串化的数组，如 `"[\"id1\",\"id2\"]"`
 6. **重新授权会覆盖**：同一 targetId + cgformId 的授权是全量覆盖，不是增量追加。需要补充权限时必须把已有和新增的 authId 合并后一起提交
+7. 🔴 **`setup_field_auth` 会覆盖已有勾选状态！** `listShow: False` / `formShow: False` 会把用户原来勾选好的列表控制/表单控制取消勾选，导致字段变成不受控。如果用户已有完整的权限配置，**禁止调用 `setup_field_auth` 重新设置**——只需 `grant_role` 追加授权即可。
+8. 🔴 **`grant_role` 不指定 `authIds` 时会自动拉取全部权限项！** 如果只想授权部分字段，必须先用 authPage 查询目标字段的权限项 ID，手动传入 `authIds`，不能依赖自动获取。
+9. 🔴 **授权前必须先查现状！** 流程：`authColumn` 看哪些字段已启用 → `authPage` 看权限树结构 → 确定要授权的具体 ID → `grant_role` 只传目标 ID。绝不能在没查现状的情况下直接跑 `setup_field_auth` + 全量 `grant_role`。
+10. **禁用字段权限用 `PUT authColumn status=0`** 会让该字段的所有 switchFlag 配置失效，用户之前的勾选全部丢失。只在确认该字段完全不需要权限控制时才使用。
+11. 🔴 **`authButton` 返回空列表≠没有按钮权限！** 视图或新表单的按钮尚未初始化时，`authButton` 的 `buttonList` 和 `authList` 都为空。需要 `POST /online/cgform/api/authButton` 逐个启用内置按钮（add/edit/delete/export/import/query/reset 等），启用后才能在权限树中看到。**不要看到空列表就说"没有按钮权限体系"。**
+12. 🔴 **启用全部按钮时，必须拿内置按钮完整列表与 `authList` 逐项比对！** `authList` 可能缺少某些内置按钮（如 bpm），或者已有记录但 status=0（禁用）。`setup_button_auth` 脚本只检查 code 是否在 `authList` 中出现过，不检查 status==1，也不检查缺少哪些内置按钮。**流程：①查 authList → ②对照完整内置列表 `add, edit, detail, delete, batch_delete, export, import, query, reset, aigc_mock_data, bpm, super_query, form_confirm` → ③缺失的 POST 新建，status=0 的 POST 更新 → ④确认全部 13 个 status=1。**
 
 ---
 

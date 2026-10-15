@@ -7,6 +7,12 @@ description: Use when user asks to create/generate/edit/modify a BPM workflow, d
 
 将自然语言的流程描述转换为 Flowable BPMN 2.0 XML，并通过 API 在 JeecgBoot 系统中自动创建流程。
 
+## 使用边界：先判断「建/改流程」还是「绑已有流程」，再决定是否整载本 skill
+
+- **建模域（整载本 skill）**：创建/编辑/发布流程、节点配置（审批人/会签/抄送/字段权限/定时/监听器）、表单关联、发起授权、XML 修改、OA 一键生成。
+- **非建模域（禁止为它整载本 skill）**：仅把**已存在**的业务流程「绑定/挂载」到低代码按钮、表单或看板——没有建/改流程动作时，本 skill 全文是多余加载（墙钟 30–40s+）。此时只需取 flowId：`GET /act/process/extActProcess/list?processName=<urlencode中文名>`（lowAppId=低代码应用 ID 过滤；`result` 先判 dict(records)/list 类型），按钮 JSON 写法见 jeecg-lowcode-dashboard `examples/gold-5ops-button-group.md`。查无此流程 → 才回到本 skill 创建。
+- 2026-09-08 实测：看板按钮「调用业务流程」绑已有流程时整载本 skill 属浪费；边界判定先行把同类需求墙钟从 3m33s 压到 ≤1m。
+
 ## 临时配置文件规则（强制）
 
 所有传给脚本的 `--config <xxx.json>` 必须写到 **`{系统临时目录}/{SKILL_NAME}/`** 下，由操作系统自动清理；skill 与脚本均不主动删除该目录或文件。
@@ -829,6 +835,77 @@ for gw_id in ['gw_par', 'gw_par_join', 'gw_incl_join']:
 
 ---
 
+### 规则29：使用表单字段前必须查询实际字段名和类型，禁止猜测（⚠️ 强制）
+
+**现象：** `formData` 审批人类型、条件表达式等使用表单字段时，凭记忆或惯例猜测字段名（如 `select_user`、`select_depart`）和类型（如 `select-user`、`select-depart`），前端显示英文字段名或类型不匹配，配置不生效。
+
+**根因：** Online 表单和 DesForm 表单的实际字段名（`dbFieldName`）和控件类型（`fieldShowType`）由创建者决定，无固定命名规范。Online 表单中 `select-user` 类型字段的实际 `fieldShowType` 可能是 `sel_user`、`select-user`、`select_user` 等变体，`select-depart` 可能是 `sel_depart`、`select-depart` 等。**每个表单的字段名和类型必须实际查询，禁止猜测。**
+
+**强制规则：凡是流程中引用表单字段（formData 审批人、条件表达式、titleExp 等），必须先查询表单实际字段列表，匹配正确的 `dbFieldName` 和 `fieldShowType`。**
+
+**Online 表单字段查询：**
+```python
+# 1. 获取 headId
+r = api_get(f'/online/cgform/head/list?tableName={table_name}&copyType=0&pageNo=1&pageSize=1')
+hid = r['result']['records'][0]['id']
+
+# 2. 查询所有字段
+r = api_get(f'/online/cgform/field/list?tableId={hid}&pageNo=1&pageSize=50')
+fields = (r.get('result') or {}).get('records', [])
+
+# 3. 按类型查找需要的字段
+user_fields = [(f['dbFieldName'], f['fieldShowType']) for f in fields
+               if f.get('fieldShowType') in ('sel_user', 'select-user', 'select_user')]
+dept_fields = [(f['dbFieldName'], f['fieldShowType']) for f in fields
+               if f.get('fieldShowType') in ('sel_depart', 'select-depart', 'select_depart')]
+```
+
+**DesForm 表单字段查询：**
+```python
+from bpmn_creator import get_desform_fields
+fields = get_desform_fields(api_base, token, form_code)
+# fields = {label: {model, key, type}, ...}
+# model 用于 formData 表达式，type 用于 fieldType
+```
+
+**formData 表达式正确格式：**
+```python
+# ✅ 正确 —— 使用实际查询到的字段名和类型
+form_data_expr = f"${{flowUtil.getUsersByFormData(execution,'{actual_dbFieldName}','{actual_fieldShowType}')}}"
+
+# ❌ 错误 —— 猜测字段名为 select_user、类型为 select-user
+form_data_expr = "${flowUtil.getUsersByFormData(execution,'select_user','select-user')}"
+```
+
+> **此规则覆盖所有引用表单字段的场景：** formData 审批人、条件表达式 `field`+`fieldType`、titleExp `${...}` 变量、字段权限 `field` 配置等。在任何 BPMN 流程中引用表单字段之前，必须先执行上述查询确认实际值。
+
+### 规则30：`saveProcess` 修正的字段名是权威的，禁止反向"修复"（⚠️ 强制）
+
+**现象：** 流程创建脚本使用 API 查询到的字段名（如 `fsel_user`、`department`），但 `saveProcess` 保存后 XML 中的字段名被后端替换为不同的值（如 `user_field`、`dept_field`）。AI 误判为后端 bug 并尝试"修正回来"，结果反而把对的改成错的。
+
+**根因：** `saveProcess` 后端在解析 `getUsersByFormData` 表达式时，会根据表单的完整上下文（主表/子表结构、字段归属）重新解析并规范化字段引用。`cgform/field/list` API 返回的是数据库表的所有字段（含主子表全部字段），其中可能存在同名重复字段或属于子表的字段，不能直接用于 BPMN 表达式。
+
+**强制规则：**
+
+1. **`saveProcess` 保存后立即读取并验证 XML 中的 formData 表达式**。若字段名被后端修改，**后端的版本是权威的**——它解析了表单的完整结构，选择的是正确的可引用字段。
+2. **禁止反向"修正"**：看到 `saveProcess` 改了字段名时，不要假设后端在"破坏"你的数据。后端改的比 API 查的更准确。
+3. **用户说的字段名优先**：当用户明确告诉你表单字段名时，直接用用户说的值，不要再反复查 API 去"验证"。
+
+```python
+# ❌ 错误 —— 看到 saveProcess 改了字段名，反向修正
+# Generated:  getUsersByFormData(execution,'fsel_user','select-user')
+# Saved:      getUsersByFormData(execution,'user_field','select-user')
+# AI: "后端把我的 fsel_user 改了，我要改回来！" → 改坏了
+pxml = pxml.replace("'user_field'", "'fsel_user'")  # 错！
+
+# ✅ 正确 —— saveProcess 修改 = 后端权威解析，直接接受
+# 若用户也确认字段名就是 user_field，则毫无疑问这就是对的。
+```
+
+> **核心原则：后端 `saveProcess` > API 字段查询 > AI 猜测。后端会做字段归属判断，API 只返回原始表结构。**
+
+---
+
 ## 前置条件
 
 用户必须提供以下信息（或由 AI 引导确认）：
@@ -1263,6 +1340,7 @@ for gw_id in ['gw_par', 'gw_par_join', 'gw_incl_join']:
 | `dept` | 部门 ID | `candidateGroups + groupType="dept"` |
 | `deptPosition` | 岗位 ID | `candidateGroups + groupType="deptPosition"` |
 | `position` | 职级 ID | `candidateUsers + 表达式 + groupType="position"` |
+| `formData` | 表单数据 | `candidateUsers="${flowUtil.getUsersByFormData(execution,'字段model','select-user或select-depart')}"` + `groupType="formData"` |
 
 **assignee 额外可选参数（节点行为控制）：**
 
@@ -1639,6 +1717,9 @@ python "<jeecg-bpmn skill目录>/scripts/bpmn_oa.py" \
 | 子流程前端节点列表缺少「开始」节点 | `nodes_str` 未包含 `id=start###nodeName=开始@@@`，startEvent 未写入节点配置表（规则23） |
 | 子流程开始节点表单地址为空，无法打开表单 | start 节点需配置主流程相同的表单地址（PC/移动端）；`formEditStatus` 按需设置，查看表单不需要设为 1，编辑表单才需要（规则24） |
 | 保存后流程图多个节点堆叠在同一位置（y 坐标重叠）、连线乱飞 | `calc_layout` 对长流程/多会签链未正确推进 y 坐标。`main()` 已内置 `validate_and_fix_layout` 在保存前自动检测并重建 BPMNDiagram（规则25）；已有流程需手动：获取 XML → 检测重叠 → 重建 DI → saveProcess + deploy |
+| formData 审批人/条件表达式中表单字段显示英文、类型不匹配 | 字段名（`dbFieldName`）和控件类型（`fieldShowType`）是猜测的而非实际查询。Online 表单查 `/online/cgform/field/list`，DesForm 表单用 `get_desform_fields()`，获取实际字段名和类型后再写入 BPMN XML（规则29） |
+| `sel_user`/`sel_depart` 和 `select-user`/`select-depart` 混用 | Online 表单的 `fieldShowType` 值与 DesForm 不完全相同，必须实际查询确认。常见变体：`sel_user` vs `select-user`、`sel_depart` vs `select-depart`（规则29） |
+| `saveProcess` 保存后 formData 字段名与传入值不一致 | **不是 bug！** 后端解析 `getUsersByFormData` 时根据主子表结构做了字段归属判断，修正后的字段名是权威的。禁止反向"修正"回去，直接接受后端的修改（规则30） |
 
 ## 数据库配置表
 

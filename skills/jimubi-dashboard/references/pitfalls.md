@@ -17,13 +17,6 @@
 | **匹配优先级** | 精确匹配 > 包含用户业务关键词 > 包含组件类型关键词 |
 | **示例** | 用户说「智慧社区折线图」，页面有「基础折线图」和「智慧社区_时间分部」两个 JLine → 正确选「智慧社区_时间分部」 |
 
-## QQY 应用 ID 踩坑
-
-| 问题 | 说明 |
-|------|------|
-| **🚨 X-Low-App-ID 必须是应用 ID，不是仪表盘页面 ID（2026-04-17）** | QQY 仪表盘的 URL 格式为 `/myapp/{appId}/drag/{pageId}`，其中 **appId ≠ pageId**。本次错误：用户传入的"应用下仪表盘 ID"（1205108055181320192）被误当作 `X-Low-App-ID` 使用，导致 `/desform/api/list/options` 返回空列表。**正确做法**：从 URL 中分别提取 `appId`（`/myapp/` 后第一段）和 `pageId`（`/drag/` 后的 ID），X-Low-App-ID 头填 appId，query_page 传 pageId。如用户只提供了一个 ID，必须询问"这是应用 ID 还是仪表盘页面 ID？"，或请用户提供完整 URL。 |
-| **🚨 表单列表为空时禁止从现有组件读取表单信息自行决定（2026-04-17）** | `/desform/api/list/options` 返回空时，错误做法是去读现有组件的 config 推断表单并自行选用。正确做法是：①先排查是否用错了 appId（最常见原因）；②确认 appId 无误后如仍为空，告知用户并请其确认。**任何情况下不得自行决定使用哪个表单**。 |
-
 ## 核心踩坑
 
 | 问题 | 说明 |
@@ -99,24 +92,10 @@
 | **comp_ops.py --dataset-name 绑定后无数据** | list 接口不返回字段列表，已修复：自动从 getAllChartData 推断 |
 | **字典翻译用 jimu_dict 不是 sys_dict** | 大屏字典 API 为 `/jmreport/dict/*`，不是 `/sys/dict/*`。`/sys/dict/getDictItems/` 需要签名且是系统字典表，大屏不使用 |
 
-## QQY全组件仪表盘踩坑（2026-04-16 首次生成实录）
-
-> **背景**：首次为 QQY 仪表盘生成全组件（30统计+7UI），花了多轮才成功。已将踩坑记录在此，并提取为预置脚本 `gen_qqy_all_comps.py`，**下次直接用预置脚本，1轮完成**。
+## 数据集批量绑定相关（SQL/API）
 
 | 问题 | 说明 |
 |------|------|
-| **🚨 大屏全组件脚本（gen_all_comps.py）不能用于仪表盘** | `gen_all_comps.py` 使用像素坐标（bigScreen样式）、暗色主题，而仪表盘用24列栅格、亮色主题。需要独立的 `gen_qqy_all_comps.py`（已创建） |
-| **🚨 读 JSON 文件中文报 GBK 编码错误** | Windows 默认 GBK 编码，`json.load(open(...))` 读含中文字段的 JSON 会报 `UnicodeDecodeError: 'gbk' codec can't decode`。**必须加 `encoding='utf-8'`**：`json.load(open('file.json', 'r', encoding='utf-8'))` |
-| **🚨 Windows 无 python3 命令** | Windows 中 `python3` 不存在，必须用 `py`。执行命令改为 `PYTHONIOENCODING=utf-8 py script.py` |
-| **⚠️ QQY dataType=4 缺少 compStyleConfig/analysis 白屏** | 前端 `useChartBiz.ts` 访问 `compStyleConfig.summary.showTotal`，缺少时 TypeError 白屏。每个 dataType=4 组件必须包含：`compStyleConfig: {'summary': {'showTotal': False, 'showY': False, 'decimals': 0}}` + `analysis: {}` |
-| **⚠️ filter.conditionFields 缺少导致设置弹窗报错** | `filter` 对象必须包含 `conditionFields: []`（空数组），否则用户点击组件"设置"按钮时前端读取 forEach 报错 |
-| **⚠️ isGroup=True 图表缺少 seriesType** | JStackBar/JMultipleBar/JNegativeBar/JMultipleLine/DoubleLineBar/JTotalProgress/JBubble 等 isGroup=True 的图表，config 必须含 `seriesType: 'bar'/'line'/'scatter'` 字段 |
-| **⚠️ 仪表盘类 nameFields 必须为空数组** | JGauge/JColorGauge/JAntvGauge 的 `nameFields` 必须是 `[]`，不能放字符串维度字段。这些组件只需要 `valueFields`（数值字段） |
-| **⚠️ 散点图 nameFields 必须是数值字段** | JScatter 的 `nameFields` 必须放数值类型字段（如"年龄"字段），不能放字符串维度字段（如"名称"字段），否则散点图 X 轴无法渲染 |
-| **⚠️ 地图组件缺少 commonOption 不渲染** | 地图类（JAreaMap/JBubbleMap/JHeatMap/JBarMap）必须同时包含：`commonOption`（barSize/barColor等）+ `option.geo`（旧版 itemStyle.normal/emphasis 格式）+ `option.visualMap`（含 seriesIndex）+ `option.area` |
-| **⚠️ 地图 visualMap.seriesIndex 类型不同** | JAreaMap/JBarMap → `seriesIndex: [0]`；JBubbleMap/JHeatMap → `seriesIndex: [1]`。搞错会导致视觉映射不对 |
-| **⚠️ JPivotTable 需要顶层 pivotTable 配置** | 透视表除了 nameFields/valueFields 外，还需要顶层 `pivotTable: {'rowFields': [...], 'columnFields': [], 'valueFields': [...], 'aggregation': 'SUM', 'showTotal': False, ...}` |
-| **⚠️ QQY 保存页面必须传 lowAppId** | `POST /drag/page/edit` body 中必须有 `lowAppId: APP_ID`，否则应用归属不会写入数据库，页面从应用仪表盘列表消失 |
 | **SQL 最大返回 1000 条** | 后端限制 |
 | **⚠️ list 接口不返回 datasetItemList/datasetParamList** | `GET /drag/onlDragDatasetHead/list` 返回的记录中 `datasetItemList` 和 `datasetParamList` 始终为空数组，但数据实际已保存。验证方式：调用 `getAllChartData` 检查 `dictOptions` 是否生效 |
 | **⚠️ dataset_ops.py create-sql 参数名必须是 --db-source** | 命令行参数 `--db-source` 对应脚本内部 `args.db_source`（下划线），但脚本内部错误引用了 `args.dbsource`（无下划线）导致 `AttributeError`。**正确做法**：使用自定义脚本直接调用 API 创建数据集，避免依赖 dataset_ops.py 的参数问题。参考代码：
@@ -1292,58 +1271,6 @@ bi_utils._request('POST', '/drag/page/edit', data={
 
 **适用场景**：所有需要在已有组件基础上新增组件的自定义脚本（弹窗、选项卡、连线等），
 均应使用 `queryById + edit` 代替 `query_page + save_page`，除非能确认 template 读取正确。
-
----
-
-## QQY 仪表盘菜单踩坑
-
-### 踩坑：QQY 仪表盘创建后 parentId 为空，不显示在任何分组下
-
-**现象**：调用 `/drag/page/add` 创建仪表盘后，在低代码应用侧边栏中找不到该仪表盘，或只显示在根节点而不在任何分组内。
-
-**原因**：`/drag/page/add` 会自动在 `lowAppMenu` 中生成一条 `type=drag` 的菜单记录，但 `parentId` 默认为空，不属于任何分组。
-
-**修复**：创建完仪表盘后，必须额外调用 `PUT /online/lowAppMenu/edit` 设置 `parentId`：
-
-```python
-# Step 1: 用 appId 参数查菜单（lowAppId 参数无效，返回所有应用菜单）
-r = requests.get(f'{API_BASE}/online/lowAppMenu/list', headers=HEADERS,
-    params={'appId': APP_ID, 'pageSize': 100})
-records = r.json().get('result', {}).get('records', []) or []
-# 过滤本应用的菜单，找 type='group' 目标分组 和 type='drag' parentId为空的仪表盘菜单
-for m in [x for x in records if x.get('appId') == APP_ID]:
-    print(m['id'], m['type'], m['menuName'], m.get('parentId'))
-
-# Step 2: 设置 parentId 归入分组
-body = {
-    'id': DRAG_MENU_ID,       # type='drag' 的菜单项 ID
-    'parentId': GROUP_ID,     # 目标分组 ID（type='group'）
-    'menuName': '仪表盘名称',
-    'type': 'drag',
-    'menuUrl': PAGE_ID,
-    'appId': APP_ID,
-    'orderNum': 1,
-}
-requests.put(f'{API_BASE}/online/lowAppMenu/edit', headers=HEADERS, json=body)
-```
-
-### 踩坑：查询应用菜单用 `lowAppId` 参数无效
-
-**现象**：传 `params={'lowAppId': APP_ID}` 查询菜单，返回的是所有应用的菜单混在一起，无法通过 `lowAppId` 过滤。
-
-**原因**：该接口后端未实现 `lowAppId` 的过滤逻辑，参数被忽略。
-
-**修复**：改用 `appId` 参数，再在返回结果中按 `m.get('appId') == APP_ID` 二次过滤：
-
-```python
-# ❌ 无效：
-params={'lowAppId': APP_ID}
-
-# ✅ 正确：
-params={'appId': APP_ID, 'pageSize': 100}
-# 再过滤：[m for m in records if m.get('appId') == APP_ID]
-```
-```
 
 ---
 
