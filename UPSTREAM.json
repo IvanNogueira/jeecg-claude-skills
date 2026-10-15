@@ -1,6 +1,6 @@
 {
   "upstream": "https://github.com/jeecgboot/skills",
   "branch": "main",
-  "commit": "ec0ec08b113544a681b767ade224833ede2ecc6d",
+  "commit": "84a0fc77f4f3612385ec7013779aee6fa9a1faa5",
   "ownSkills": ["jeecg","lobehub-mcp"]
 }

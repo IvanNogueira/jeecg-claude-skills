@@ -28,7 +28,7 @@
 | 图片/头像/照片 | `image` | string | 500 | 图片上传 |
 | 文件/附件 | `file` | string | 500 | 文件上传 |
 | 富文本/内容/HTML | `umeditor` | Text | 0 | 富文本编辑器 |
-| Markdown | `markdown` | Blob | 0 | Markdown编辑器 |
+| Markdown | `markdown` | string | 20000 | Markdown编辑器。⚠️ 必须用 string，用 Blob 会导致回显乱码 |
 | 用户/负责人/审批人 | `sel_user` | string | 100 | 用户选择 |
 | 部门/组织/所属部门 | `sel_depart` | string | 100 | 部门选择 |
 | 省市区/地区/地址 | `pca` | string | 100 | 省市区联动 |

@@ -1310,17 +1310,6 @@ cfg = {
 | `Table` | 表格 | JPivotTable | 透视表（分组），有专属 pivotTable 配置 |
 | `Map` | 地图 | JAreaMap / JBubbleMap / JHeatMap / JBarMap | nameField 必须为地区字段 |
 
-### 13.2 敲敲云模式（`isLowApp=true`）剔除清单
-
-`chartConfig(true)` 会递归过滤：
-
-```js
-excludeCategory = ['Progress', 'Pictorial', 'Ring', 'Rectangle', 'threeD']  // 5 个大类整体移除
-excludeComponent = ['JDynamicBar','JMixLineBar','JCapsuleChart','JPercentBar','JStepLine','JRotatePie','JQuadrant']  // 7 个子图单独移除
-```
-
-敲敲云模式实际可用 **12 大类 / 约 35 子图**。`isLowApp=false`（仪表盘 / 大屏标准模式）则全量可用。
-
 ### 13.3 字段拖放区行为（`useChartBiz.ts` watch 逻辑）
 
 | 拖放区 | 触发条件 | 切换图表时清空逻辑 |

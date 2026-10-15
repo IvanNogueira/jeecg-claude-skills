@@ -75,6 +75,21 @@
 					 <#elseif po.classType=='checkbox'>
 								<#assign need_checkbox = true>
 								<j-checkbox type="${po.classType}" v-model:value="formData.${po.fieldName}" dictCode="${form_field_dictCode}" placeholder="请选择${po.filedComment}" <#if po.readonly=='Y'>disabled</#if> allow-clear />
+					<#-- update-begin---author:liusq ---date:20250601  for：[QQYUN-14906]代码生成器，支持新版关联记录生成（表模式）---------- -->
+					<#elseif po.classType=='link_table'>
+								<#assign need_link_table = true>
+								<j-link-table-card
+									placeholder="请选择${po.filedComment}"
+									v-model:value="formData.${po.fieldName}"
+									tableName="${po.dictTable}"
+									valueField="${po.dictField}"
+									textField="${po.dictText}"
+									queryMode="table"
+									<#if po.extendParams?exists && po.extendParams.imageField?exists>
+									imageFielde="${po.extendParams.imageField}"
+									</#if>
+									:multi="${((po.queryMode!"") == "multi")?string('true','false')}" <#if po.readonly=='Y'>disabled</#if> />
+					<#-- update-end---author:liusq ---date:20250601  for：[QQYUN-14906]代码生成器，支持新版关联记录生成（表模式）---------- -->
 					<#elseif po.classType=='sel_search'>
 								<#assign need_search = true>
 								<j-search-select v-model:value="formData.${po.fieldName}" dict="${form_field_dictCode}" <#if po.readonly=='Y'>disabled</#if> allow-clear />

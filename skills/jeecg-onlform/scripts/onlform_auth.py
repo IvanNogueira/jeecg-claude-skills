@@ -156,14 +156,18 @@ def setup_button_auth(api_base: str, token: str, config: dict) -> None:
     print(f'配置按钮权限: cgformId={cgform_id}')
     print(f'{"=" * 50}')
 
-    # 查询已启用的按钮，避免重复创建
-    existing_codes = set()
+    # 查询已有的按钮记录（含启用和禁用的），用于判断是新建还是更新
+    existing_buttons = {}  # code -> {id, status, page}
     try:
         r = api_request(api_base, token,
                         f'/online/cgform/api/authButton/{cgform_id}?pageNo=1&pageSize=50',
                         method='GET')
         for btn in (r.get('result') or {}).get('authList', []):
-            existing_codes.add(btn.get('code'))
+            existing_buttons[btn.get('code')] = {
+                'id': btn.get('id'),
+                'status': btn.get('status', 0),
+                'page': btn.get('page', 3)
+            }
     except Exception:
         pass
 
@@ -176,7 +180,8 @@ def setup_button_auth(api_base: str, token: str, config: dict) -> None:
         else:
             code, page = button['code'], button.get('page', 3)
 
-        if code in existing_codes:
+        existing = existing_buttons.get(code)
+        if existing and existing['status'] == 1:
             print(f'  {code}: 已启用，跳过')
             skip_count += 1
             continue
@@ -190,6 +195,10 @@ def setup_button_auth(api_base: str, token: str, config: dict) -> None:
                 'control': 5,
                 'status': 1
             }
+            if existing:
+                # 已有记录但 status=0，带 id 更新
+                payload['id'] = existing['id']
+                print(f'  {code}: 已有记录(status=0)，更新为启用...')
             result = api_request(api_base, token,
                                  '/online/cgform/api/authButton', payload)
             success = result.get('success')

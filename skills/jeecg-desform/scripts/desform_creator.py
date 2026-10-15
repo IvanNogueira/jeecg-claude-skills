@@ -149,6 +149,7 @@ _TYPE_MAP = {
     'ocr': OCR,
     'map': MAP,
     'summary': SUMMARY,
+    'summary-date': SUMMARY_DATE,
     'editor': EDITOR,
     'markdown': MARKDOWN,
     # OA
@@ -224,6 +225,13 @@ _SUB_PARAM_MAP = {
     'filterable': 'filterable',
     'clearable': 'clearable',
     'disabled': 'disabled',
+    # 以下 options-only 参数不走工厂函数，由 _apply_options_keys 后置写入
+    # 'useColor': 'useColor',
+    # 'fieldNote': 'fieldNote',
+    # 'inline': 'inline',
+    # 'showLabel': 'showLabel',
+    # 'hidden': 'hidden',
+    # 'hiddenOnAdd': 'hiddenOnAdd',
     # sub-select-tree
     'categoryCode': 'category_code',
     'dataFrom': 'data_from',
@@ -285,7 +293,7 @@ _PARAM_MAP = {
     'titleField': 'title_field',
     'showFields': 'show_fields',
     'showMode': 'show_mode',
-    'showType': 'show_type',
+    'showType': 'showType',
     'isSelf': 'is_self',
     # link-field
     'linkRecordKey': 'link_record_key',
@@ -301,6 +309,16 @@ _PARAM_MAP = {
     'filterable': 'filterable',
     'clearable': 'clearable',
     'disabled': 'disabled',
+    # 以下 options-only 参数不走工厂函数，由 _apply_options_keys 后置写入
+    # 'useColor': 'useColor',
+    # 'fieldNote': 'fieldNote',
+    # 'inline': 'inline',
+    # 'showLabel': 'showLabel',
+    # 'hidden': 'hidden',
+    # 'hiddenOnAdd': 'hiddenOnAdd',
+    # date / summary-date
+    'format': 'fmt',
+    'dateType': 'date_type',
     # select-tree
     'categoryCode': 'category_code',
     'dataFrom': 'data_from',
@@ -364,6 +382,35 @@ _PARAM_MAP = {
     'length': 'length',
 }
 
+# ---- 白名单：纯 options 属性的 JSON 配置键 ----
+# 这些键的最终归宿是 widget.options，但没有任何工厂函数接受它们作为参数，
+# 因此从 _PARAM_MAP 中移除，在 widget 构建后通过 _apply_options_keys 写入。
+_OPTIONS_KEYS = {
+    'fieldNote', 'hidden', 'hiddenOnAdd', 'inline', 'showLabel', 'useColor',
+    'disabled', 'placeholder', 'unique', 'readonly', 'precision', 'allowHalf',
+    'filterable', 'clearable',
+}
+
+# 所有已知的 JSON 配置键（白名单校验用，避免误报警告）
+_KNOWN_JSON_KEYS = {'name', 'type', 'options', 'text', 'fields',
+                    'columnNumber', 'operationMode', 'isWordStyle', 'isWordInnerGrid', 'defaultRows'}
+_KNOWN_JSON_KEYS |= set(_PARAM_MAP.keys()) | _OPTIONS_KEYS
+_SUB_KNOWN_JSON_KEYS = {'name', 'type'} | set(_SUB_PARAM_MAP.keys()) | _OPTIONS_KEYS
+
+
+def _apply_options_keys(widget, field_def):
+    """将 field_def 白名单内的 options 属性写入 widget.options。
+    widget 可能是 (card, key, model) tuple 或纯 dict。
+    """
+    w = widget[0] if isinstance(widget, tuple) else widget
+    # card 容器：提取内层控件
+    if w.get('type') == 'card' and w.get('list') and len(w['list']) == 1:
+        w = w['list'][0]
+    opts = w.setdefault('options', {})
+    for key in _OPTIONS_KEYS:
+        if key in field_def:
+            opts[key] = field_def[key]
+
 
 def _build_sub_widget(field_def, parent_key):
     """根据 JSON 字段定义构建子表内控件 tuple"""
@@ -378,6 +425,11 @@ def _build_sub_widget(field_def, parent_key):
     for json_key, param_name in _SUB_PARAM_MAP.items():
         if json_key in field_def:
             kwargs[param_name] = field_def[json_key]
+
+    # 警告未知参数
+    for k in field_def:
+        if k not in _SUB_KNOWN_JSON_KEYS:
+            print(f'  ⚠ [警告] 子表字段 "{name}" 的配置项 "{k}" 脚本无法识别，如需配置请使用 --preprocess 预处理方式设置')
 
     # sub-select / sub-radio / sub-checkbox 需要 options 作为位置参数
     if ftype in ('select', 'radio', 'checkbox'):
@@ -426,6 +478,7 @@ def build_widget(field_def):
         sub_widgets = []
         for sf in sub_fields:
             w, k, m = _build_sub_widget(sf, parent_key)
+            _apply_options_keys(w, sf)
             sub_widgets.append(w)
         # 用真正的参数创建子表（sub_widgets 会被均匀分配到各列）
         sub_table, _ = make_sub_table(
@@ -451,6 +504,11 @@ def build_widget(field_def):
         if json_key in field_def:
             kwargs[param_name] = field_def[json_key]
 
+    # 警告未知参数
+    for k in field_def:
+        if k not in _KNOWN_JSON_KEYS:
+            print(f'  ⚠ [警告] 字段 "{name}" 的配置项 "{k}" 脚本无法识别，如需配置请使用 --preprocess 预处理方式设置')
+
     # divider 特殊处理：text 参数
     if ftype == 'divider':
         text = field_def.get('text', name)
@@ -474,6 +532,12 @@ def build_widget(field_def):
 
     # summary 汇总控件：需要 sub_table_model + field_model 作为位置参数
     if ftype == 'summary':
+        sub_table_model = kwargs.pop('sub_table_model', '')
+        field_model = kwargs.pop('field_model', '')
+        return factory(name, sub_table_model, field_model, **kwargs)
+
+    # summary-date 汇总日期：同 summary，位置参数 + date_type/fmt 等可选
+    if ftype == 'summary-date':
         sub_table_model = kwargs.pop('sub_table_model', '')
         field_model = kwargs.pop('field_model', '')
         return factory(name, sub_table_model, field_model, **kwargs)
@@ -517,23 +581,53 @@ def _extract_widget_info(item):
     return inner, key, model, inner.get('type', '')
 
 
-def _build_name_registry(fields, widgets):
-    """构建字段名 → (key, model) 的映射注册表
+def _find_sub_field_widget(widgets, sub_table_name, field_name):
+    """在 widgets 中查找子表内的字段 widget。
 
-    用于后续自动解析 capital-money 的 moneyWidgetKey 和 formula 的表达式引用。
-    注册表 key 为字段名（中文），同时为每个字段生成类型前缀别名（如 'money_预算总额'）。
+    Args:
+        widgets: create_form 的 widgets 列表
+        sub_table_name: 子表中文名
+        field_name: 子表内字段中文名
+
+    Returns:
+        找到的字段 widget dict，未找到返回 None
     """
-    registry = {}  # name → (key, model, type)
-    for i, (fd, widget) in enumerate(zip(fields, widgets)):
+    for item in widgets:
+        inner, key, model, wtype = _extract_widget_info(item)
+        if wtype == 'sub-table-design' and inner.get('name') == sub_table_name:
+            for col in inner.get('columns', []):
+                for sw in col.get('list', []):
+                    if sw.get('name') == field_name:
+                        return sw
+    return None
+
+
+def _build_name_registry(fields, widgets):
+    """构建两级作用域注册表，解决主表/子表字段同名冲突
+
+    Returns:
+        (main_registry, sub_registry)
+        - main_registry: {字段名 → (key, model, type)}  仅主表字段
+        - sub_registry:  {子表名 → {字段名 → (key, model, type)}}
+
+    规则：
+        - 向下（主→子）禁止引用
+        - 向上（子→主）仅默认值允许，公式/条码等禁止跨界
+    """
+    main_registry = {}   # 主表字段
+    sub_registry = {}    # {子表名称: {子字段名 → (key, model, type)}}
+
+    for fd, widget in zip(fields, widgets):
         inner, key, model, wtype = _extract_widget_info(widget)
         name = fd.get('name', '')
+
+        # 主表字段（排除分隔符；子表容器也需注册，供 summary linkTable 查 model）
         if name and name != '---' and key and model:
-            registry[name] = (key, model, wtype)
-            # 同时注册 子表内的子控件
-        # 子表内控件也注册
+            main_registry[name] = (key, model, wtype)
+
+        # 子表内字段：归属到子表名下，不与主表混合
         if wtype == 'sub-table-design' and 'columns' in inner:
-            sub_fields = fd.get('fields', [])
-            sub_idx = 0
+            sub_fields = {}
             for col in inner.get('columns', []):
                 for sub_w in col.get('list', []):
                     sub_name = sub_w.get('name', '')
@@ -541,25 +635,27 @@ def _build_name_registry(fields, widgets):
                     sub_model = sub_w.get('model', '')
                     sub_type = sub_w.get('type', '')
                     if sub_name and sub_key and sub_model:
-                        registry[sub_name] = (sub_key, sub_model, sub_type)
-                    sub_idx += 1
-    return registry
+                        sub_fields[sub_name] = (sub_key, sub_model, sub_type)
+            sub_registry[name] = sub_fields
+
+    return main_registry, sub_registry
 
 
-def _resolve_model_ref(expression, registry):
+def _resolve_model_ref(expression, scope_registry):
     """解析表达式中的 $placeholder$ 引用，替换为实际的 model
 
-    支持的占位符格式：
-    - $字段名$  — 直接使用字段中文名匹配（如 $预算总额$）
+    Args:
+        expression: 含 $字段名$ 占位符的表达式
+        scope_registry: {字段名 → (key, model, type)}  限定查找范围
+
+    仅在 scope_registry 内查找，找不到则保留原样（可能已是实际 model）。
     """
     import re
 
     def replacer(match):
         ref = match.group(1)
-        # 直接匹配字段名
-        if ref in registry:
-            return f'${registry[ref][1]}$'
-        # 未匹配到，保留原始引用（可能已经是实际 model）
+        if ref in scope_registry:
+            return f'${scope_registry[ref][1]}$'
         return match.group(0)
 
     return re.sub(r'\$([^$]+)\$', replacer, expression)
@@ -569,28 +665,33 @@ def _post_process_widgets(fields, widgets):
     """对构建完成的控件列表进行后处理，自动解析跨控件引用
 
     处理内容：
-    1. capital-money: 自动查找前面最近的 money 控件 key，设置 moneyWidgetKey
-    2. summary: linkTable/field/filter.rules 中的中文名解析为实际 model
-    3. formula: 表达式中的 $字段名$ 替换为实际 model
-    4. barcode: sourceModel 中的字段名替换为实际 model
-    5. text-compose: expression 中的字段名替换为实际 model
+    1. capital-money: 在主表作用域内查找 money 控件 key
+    2. summary: linkTable(子表名匹配) / field(子表内作用域) / filter(子表内作用域)
+    3. formula(主表): 表达式仅在 main_registry 中解析
+    4. barcode: sourceModel 仅在 main_registry 中解析
+    5. text-compose: expression 仅在 main_registry 中解析
+    6. link-record: titleField 仅在 main_registry 中解析
+    7. 子表 formula: 仅在本子表作用域内解析，不穿透到主表
+
+    作用域规则：
+        - 向下（主→子）禁止：主表公式/条码等不能引用子表字段
+        - 向上（子→主）仅默认值允许：子表公式不允许引用主表字段
     """
-    registry = _build_name_registry(fields, widgets)
+    main_registry, sub_registry = _build_name_registry(fields, widgets)
 
     for i, (fd, widget) in enumerate(zip(fields, widgets)):
         inner, key, model, wtype = _extract_widget_info(widget)
 
-        # 1. capital-money: 关联 moneyWidgetKey
-        #    优先级: moneyField(字段中文名解析) > moneyWidgetKey(直接指定) > 自动查找前面最近的 money/formula/summary
+        # 1. capital-money: 在主表作用域内查找 money 控件 key
         if wtype == 'capital-money':
             opts = inner.get('options', {})
             money_field_name = opts.pop('moneyField', None) or fd.get('moneyField')
-            if money_field_name and money_field_name in registry:
-                resolved_key = registry[money_field_name][0]
+            if money_field_name and money_field_name in main_registry:
+                resolved_key = main_registry[money_field_name][0]
                 opts['moneyWidgetKey'] = resolved_key
                 print(f'  [指定关联] 大写金额 "{fd.get("name")}" → moneyField="{money_field_name}" → moneyWidgetKey={resolved_key}')
             elif not opts.get('moneyWidgetKey'):
-                # 兜底：查找前面最近的 money/formula/summary 控件
+                # 兜底：查找前面最近的 money/formula/summary 控件（仅主表）
                 money_key = None
                 for j in range(i - 1, -1, -1):
                     _, prev_key, _, prev_type = _extract_widget_info(widgets[j])
@@ -603,86 +704,108 @@ def _post_process_widgets(fields, widgets):
                 else:
                     print(f'  [警告] 大写金额 "{fd.get("name")}" 未找到可关联的金额控件')
 
-        # 2. summary: 将中文名解析为实际 model（linkTable → sub_table_model, field → field_model）
-        if wtype == 'summary':
+        # 2. summary / summary-date: linkTable 匹配子表名，field/filter 在本子表作用域内解析
+        if wtype == 'summary' or (wtype == 'date' and inner.get('isSummary')):
             opts = inner.get('options', {})
-            # 解析 linkTable（子表中文名 → 子表 model）
+            # linkTable: 子表中文名 → 子表 model（匹配 sub_registry 的 key）
             link_table = opts.get('linkTable', '')
-            if link_table and link_table in registry:
-                resolved_model = registry[link_table][1]
+            if link_table and link_table in sub_registry:
+                # 子表本身也是一个主表控件，用 main_registry 取其 model
+                resolved_model = main_registry.get(link_table, (None, link_table, None))[1]
                 opts['linkTable'] = resolved_model
                 print(f'  [自动解析] 汇总 "{fd.get("name")}" linkTable: "{link_table}" → {resolved_model}')
-            # 解析 field（子表列中文名 → 列 model），inner-record-count 不需要解析
-            field_val = opts.get('field', '')
-            if field_val and field_val != 'inner-record-count' and field_val in registry:
-                resolved_field = registry[field_val][1]
-                opts['field'] = resolved_field
-                print(f'  [自动解析] 汇总 "{fd.get("name")}" field: "{field_val}" → {resolved_field}')
-            # 解析 filter.rules 中的 model 和 value（中文名 → 实际 model）
-            flt = opts.get('filter', {})
-            if flt.get('enabled'):
-                for rule in flt.get('rules', []):
-                    # 解析 rule.model（子表列中文名 → 列 model）
-                    rule_model = rule.get('model', '')
-                    if rule_model and rule_model in registry:
-                        resolved_model = registry[rule_model][1]
-                        rule['model'] = resolved_model
-                        print(f'  [自动解析] 汇总 "{fd.get("name")}" filter.model: "{rule_model}" → {resolved_model}')
-                    # 当 valueType=field 时，value 数组中的值也是字段引用，需要解析
-                    if rule.get('valueType') == 'field':
-                        new_values = []
-                        for v in rule.get('value', []):
-                            if isinstance(v, str) and v in registry:
-                                resolved_v = registry[v][1]
-                                print(f'  [自动解析] 汇总 "{fd.get("name")}" filter.value: "{v}" → {resolved_v}')
-                                new_values.append(resolved_v)
-                            else:
-                                new_values.append(v)
-                        rule['value'] = new_values
 
-        # 3. formula: 解析表达式中的字段引用
+                # field/filter: 在对应子表作用域内解析
+                sub_scope = sub_registry[link_table]
+                # inner-record-count 特殊处理：field 填汇总类型字符串，summary 留空
+                summary_type = opts.get('summary', '')
+                if summary_type == 'inner-record-count':
+                    opts['field'] = 'inner-record-count'
+                    opts['summary'] = ''
+                    print(f'  [自动解析] 汇总 "{fd.get("name")}" inner-record-count → field="inner-record-count", summary=""')
+                else:
+                    field_val = opts.get('field', '')
+                    if field_val and field_val in sub_scope:
+                        resolved_field = sub_scope[field_val][1]
+                        opts['field'] = resolved_field
+                        print(f'  [自动解析] 汇总 "{fd.get("name")}" field: "{field_val}" → {resolved_field}')
+                        # summary-date: 同步 designType 和 format 到被引用的日期字段
+                        if wtype == 'date' and inner.get('isSummary'):
+                            # 从子表 widget 中查找原字段的 options
+                            sub_widget = _find_sub_field_widget(widgets, link_table, field_val)
+                            if sub_widget:
+                                sub_opts = sub_widget.get('options', {})
+                                sub_dt = sub_opts.get('designType', 'date')
+                                sub_fmt = sub_opts.get('format', 'yyyy-MM-dd')
+                                opts['type'] = sub_dt
+                                opts['designType'] = sub_dt
+                                opts['format'] = sub_fmt
+                                print(f'  [自动匹配] 汇总日期 "{fd.get("name")}" designType/format → {sub_dt}/{sub_fmt}')
+
+                flt = opts.get('filter', {})
+                if flt.get('enabled'):
+                    for rule in flt.get('rules', []):
+                        rule_model = rule.get('model', '')
+                        if rule_model and rule_model in sub_scope:
+                            rule['model'] = sub_scope[rule_model][1]
+                            print(f'  [自动解析] 汇总 "{fd.get("name")}" filter.model: "{rule_model}" → {sub_scope[rule_model][1]}')
+                        if rule.get('valueType') == 'field':
+                            new_values = []
+                            for v in rule.get('value', []):
+                                if isinstance(v, str) and v in sub_scope:
+                                    new_values.append(sub_scope[v][1])
+                                else:
+                                    new_values.append(v)
+                            rule['value'] = new_values
+            elif link_table and link_table in main_registry:
+                # 兼容：linkTable 已是 model 的情况
+                pass
+
+        # 3. formula(主表): 仅 main_registry，不穿透到子表
         if wtype == 'formula':
             opts = inner.get('options', {})
             for expr_field in ('expression', 'dateBegin', 'dateEnd', 'dateAddExp'):
                 val = opts.get(expr_field, '')
                 if val and '$' in val:
-                    resolved = _resolve_model_ref(val, registry)
+                    resolved = _resolve_model_ref(val, main_registry)
                     if resolved != val:
                         opts[expr_field] = resolved
                         print(f'  [自动解析] 公式 "{fd.get("name")}" {expr_field}: {val} → {resolved}')
 
-        # 3. barcode: sourceModel 字段引用
+        # 4. barcode: sourceModel 仅 main_registry
         if wtype == 'barcode':
             opts = inner.get('options', {})
             src = opts.get('sourceModel', '')
             if src and '$' in src:
-                resolved = _resolve_model_ref(src, registry)
+                resolved = _resolve_model_ref(src, main_registry)
                 if resolved != src:
                     opts['sourceModel'] = resolved
 
-        # 4. text-compose: expression 字段引用
+        # 5. text-compose: expression 仅 main_registry
         if wtype == 'text-compose':
             opts = inner.get('options', {})
             expr = opts.get('expression', '')
             if expr and '$' in expr:
-                resolved = _resolve_model_ref(expr, registry)
+                resolved = _resolve_model_ref(expr, main_registry)
                 if resolved != expr:
                     opts['expression'] = resolved
                     print(f'  [自动解析] 文本组合 "{fd.get("name")}" expression: {expr} → {resolved}')
 
-        # 5. link-record: titleField 若为字段中文名则解析为实际 model（自关联时常用）
+        # 6. link-record: titleField 仅 main_registry（自关联时常用）
         if wtype == 'link-record':
             opts = inner.get('options', {})
             tf = opts.get('titleField', '')
-            if tf and tf in registry:
-                resolved_model = registry[tf][1]
+            if tf and tf in main_registry:
+                resolved_model = main_registry[tf][1]
                 opts['titleField'] = resolved_model
                 print(f'  [自动解析] 关联记录 "{fd.get("name")}" titleField: "{tf}" → {resolved_model}')
 
-    # 子表内 formula/product 也需要解析
+    # 7. 子表内 formula/product: 仅在本子表作用域内解析，不穿透到主表
     for i, (fd, widget) in enumerate(zip(fields, widgets)):
         inner, _, _, wtype = _extract_widget_info(widget)
         if wtype == 'sub-table-design' and 'columns' in inner:
+            sub_name = fd.get('name', '')
+            sub_scope = sub_registry.get(sub_name, {})
             for col in inner.get('columns', []):
                 for sub_w in col.get('list', []):
                     sub_type = sub_w.get('type', '')
@@ -691,7 +814,7 @@ def _post_process_widgets(fields, widgets):
                         for expr_field in ('expression', 'dateBegin', 'dateEnd', 'dateAddExp'):
                             val = sub_opts.get(expr_field, '')
                             if val and '$' in val:
-                                resolved = _resolve_model_ref(val, registry)
+                                resolved = _resolve_model_ref(val, sub_scope)
                                 if resolved != val:
                                     sub_opts[expr_field] = resolved
 
@@ -765,6 +888,7 @@ def main():
     widgets = []
     for fd in fields:
         widget = build_widget(fd)
+        _apply_options_keys(widget, fd)
         widgets.append(widget)
 
     # 后处理：自动解析跨控件引用（capital-money、formula 表达式等）

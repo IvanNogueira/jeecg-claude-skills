@@ -92,7 +92,8 @@
   "extendParams": {
     "picker": "",                            // 日期 picker 类型
     "text": "", "store": "",                 // sel_user 的字段映射
-    "popupMulti": ""
+    "popupMulti": "",
+    "imageField": ""  // link_table 专用：关联表图片字段名，用于卡片展示（对应 JLinkTableCard imageField prop）
   }
 }
 ```

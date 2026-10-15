@@ -223,3 +223,6 @@ date 控件通过 `defaultValueType` 控制默认值行为：
 3. `format: "number"` 会将结果转为数字类型，适用于数字/金额字段
 4. compose 类型的字段引用值为 `null/undefined` 时替换为空字符串
 5. function/javascript 类型的字段引用值为字符串时会自动加引号包裹
+6. **⚠️ radio/checkbox/select 默认值必须使用控件已有选项列表中的实际 `value`，不能凭猜测赋值（如猜 `"1"` 但实际是 `"选项1"`）。批量设置前先用 `query_form` 读取出这些控件的 `options.options[].value` 再填**
+7. **⚠️ `time` 控件默认值格式为 `HH:mm:ss`（含秒），如 `'09:00:00'`，不是 `'09:00'`**
+8. **⚠️ `org-role` / `select-tree` 默认值可能为数组格式 `['value']` 而非字符串；`select-user` / `select-depart` 可能使用 `advancedSetting.defaultValue` 的 `#F:value#` 格式配合 `valueSplit`。设置前先查询控件当前配置确认格式**

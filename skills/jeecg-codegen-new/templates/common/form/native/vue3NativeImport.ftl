@@ -16,6 +16,9 @@
 <#if need_popup_dict>
   import JPopupDict from '/@/components/Form/src/jeecg/components/JPopupDict.vue';
 </#if>
+<#if need_link_table>
+  import JLinkTableCard from '/@/components/Form/src/jeecg/components/JLinkTableCard/JLinkTableCard.vue';
+</#if>
 <#if need_category>
   import JCategorySelect from '/@/components/Form/src/jeecg/components/JCategorySelect.vue';
 </#if>

@@ -118,7 +118,8 @@
 | `tabs` | 标签页容器（见下方 tabs 说明） |
 | `link-record` | 关联记录 |
 | `link-field` | 他表字段 |
-| `summary` | 汇总（summaryType: inner-sum/inner-average/inner-max/inner-min/inner-record-count/inner-completed-count/inner-incompletely-count/inner-date-earliest/inner-date-latest） |
+| `summary` | 汇总（数值类聚合：sum/avg/max/min/count 等） |
+| `summary-date` | 汇总日期（语法糖，内部映射到 `SUMMARY_DATE()`，最终生成 `type:"date"`+`isSummary:true` 的控件，并非独立控件类型。参数: linkTable/field/summaryType/dateType/format/filter） |
 | `sub-table-design` | 设计子表（`fields` 必填，见下方子表说明） |
 
 ---

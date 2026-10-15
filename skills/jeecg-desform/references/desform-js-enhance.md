@@ -102,6 +102,53 @@ api.setWidgetLoading('field_model', true)
 api.setWidgetLoading('field_model', false)
 ```
 
+#### 设置子表控件选项（设计子表 sub-table-design）
+
+`api.setFormOptions` 只作用于主表控件，**修改设计子表（sub-table-design）内控件的 options 属性必须用 `api.setSubTableOptions`**。
+
+```javascript
+api.setSubTableOptions(
+  'sub_table_design_xxx',  // 设计子表 model（第一参）
+  'select_xxx',            // 子表字段 model（第二参）
+  'options',               // 要修改的 options 属性名（第三参）
+  [
+    {label: '选项一', value: '1'},
+    {label: '选项二', value: '2'}
+  ]                        // 属性值（第四参）
+)
+```
+
+典型场景：主表字段变化时联动修改子表下拉选项。
+
+> **⚠️ 编辑回显必须 `immediate: true`（编辑回显关键）**：`api.watch` 默认只在值**变化**时触发。新增时用户操作会触发，但**编辑已有记录时表单加载即带出已选值，不会触发 watch**，导致子表下拉 options 停留在默认值。加 `immediate: true` 让表单加载时立即按当前选中值初始化一次 options。
+
+```javascript
+api.watch({
+  'activity_type': {
+    handler: function(val) {
+      var subTableModel = 'signup_detail'   // 设计子表 model
+      var subFieldModel = 'member_item'     // 子表字段 model
+      if (val === 'sports') {
+        api.setSubTableOptions(subTableModel, subFieldModel, 'options', [
+          {label: '篮球', value: 'basketball'},
+          {label: '足球', value: 'football'},
+          {label: '羽毛球', value: 'badminton'}
+        ])
+      } else if (val === 'art') {
+        api.setSubTableOptions(subTableModel, subFieldModel, 'options', [
+          {label: '钢琴', value: 'piano'},
+          {label: '舞蹈', value: 'dance'},
+          {label: '合唱', value: 'chorus'}
+        ])
+      }
+    },
+    immediate: true
+  }
+})
+```
+
+> 若切换时需清空目标字段值（如清空已选课程），用 `handler(val, oldVal)` 并在 `val !== oldVal` 时才 `setFormData` 清空——immediate 首轮执行时 `val === oldVal`，不会误清编辑回显值。
+
 #### 监听字段变化
 
 ```javascript
@@ -114,7 +161,7 @@ api.watch({
     handler: function(newVal, oldVal) {
       // 处理变化
     },
-    immediate: true  // 立即执行一次
+    immediate: true  // 立即执行一次（表单加载即触发，编辑回显初始化用）
   }
 })
 ```

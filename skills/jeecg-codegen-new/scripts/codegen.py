@@ -40,6 +40,7 @@ STYLE_FRONTEND_SUPPORT = {
     'tab/onetomany':         {'vue3'},
     'inner-table/onetomany': {'vue3'},
     'erp/onetomany':         {'vue3', 'vue3Native'},
+    'jvxe/onetomany':        {'vue3', 'vue3Native'},
 }
 VALID_STYLES = set(STYLE_FRONTEND_SUPPORT.keys())
 
@@ -111,6 +112,7 @@ EXTEND_PARAMS_DEFAULTS = {
     'picker': '',
     'pidField': '',
     'hasChildren': '',
+    'textField': '',
     'text': '',
     'store': '',
     # multi: 模板用 `${...multi?default('true')}`（字符串插值到 :multiple="X"）。
@@ -191,6 +193,15 @@ def _enrich_tablevo(tv: dict, ctx: dict) -> dict:
     ext = out.get('extendParams') or {}
     for k, v in EXTEND_PARAMS_DEFAULTS.items():
         ext.setdefault(k, v)
+    # 树表 textField 自动推导：取第一个 isShowList=Y 的非系统字段的 fieldDbName
+    if ext.get('pidField') and not ext.get('textField'):
+        sys_fields = {'id', 'pid', 'has_child', 'create_by', 'create_time',
+                      'update_by', 'update_time', 'sys_org_code'}
+        for c in ctx.get('originalColumns') or []:
+            db_name = c.get('fieldDbName', '')
+            if db_name not in sys_fields and c.get('isShowList') == 'Y':
+                ext['textField'] = db_name
+                break
     out['extendParams'] = ext
     return out
 
@@ -278,6 +289,9 @@ def normalize_ctx(ctx: dict) -> dict:
         # 用户经常两者都填 snake_case，这里统一规范化。
         sub['foreignKeys'] = [_snake_to_camel(k) for k in sub['foreignKeys']]
         sub.setdefault('foreignRelationType', '0')
+        # foreignMainKeys: 子表外键对应的主表字段名（jvxe/vue3Native 模板需要）
+        if 'foreignMainKeys' not in sub:
+            sub['foreignMainKeys'] = [ctx.get('primaryKeyField', 'id')] * len(sub['foreignKeys'])
         sub.setdefault('ftlDescription', sub.get('tableName', ''))
         sub.setdefault('primaryKeyField', 'id')
     ctx['subTables'] = subs

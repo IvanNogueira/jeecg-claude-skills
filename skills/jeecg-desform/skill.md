@@ -329,7 +329,7 @@ echo '<json_config>' | python "<skill目录>/scripts/desform_creator.py" --api-b
 
 如果用户只是添加/修改/删除个别字段：
 - **添加字段**：`add_widget(code, widget)` — 向已有表单追加控件
-- **修改字段属性**：`update_widget(code, changes_dict, *, key=None, model=None)` — 修改指定控件属性，优先传 `key=`
+- **修改字段属性**：`update_widget(code, changes_dict, *, key=None, model=None)` — 修改指定控件属性，优先传 `key=`。⚠️ 调用前先确认目标属性是否属于组件选项（options 子层），如果是必须套 `{"options": {...}}`，否则后端静默失败
 - **删除字段**：`delete_widget(code, *, key=None, model=None)` — 删除指定控件，优先传 `key=`
 - 操作后自动同步权限：`sync_auth(code, design_list, form_id)`
 
@@ -380,13 +380,17 @@ save_design_from_file('<form_code>', file_path)
 
 ## 复制表单
 
-`copy_form(source_code, new_code)` 可快速复制已有表单的设计 JSON 创建新表单。适用于基于现有表单创建类似表单（如复制"请假申请"改造为"出差申请"）。
+`copy_form(source_code)` 复制已有工作表，与前端「复制工作表」一致（`POST /online/lowAppMenu/copy`），表单设计、视图、按钮等配置一并复制。适用于基于现有表单创建类似表单（如复制"请假申请"改造为"出差申请"）。
+
+限制（2026-10-14 起）：
+- 源表单必须挂在低代码应用的菜单下；独立表单前端也没有复制入口，会直接报错
+- 不能指定新编码：新编码由后端自动生成（形如 `原编码_xxxxcopy`），新菜单名为「原名-复制」；传 `new_code` 会报错
+- 不要再直接调 `/desform/api/copyDesignForm`：已改为微服务内部接口 `/desform/inner/api`，单体模式下不存在
 
 流程：
-1. 用户提供源表单编码和新表单编码
-2. 校验新编码可用性（`check_code_available(new_code)`）
-3. 调用 `copy_form(source_code, new_code)` 完成复制
-4. 如需修改，使用 `update_form` 或字段级操作调整
+1. 调用 `copy_form(source_code)`，返回 `{menuId, menuName, desformCode, formId, appId}`
+2. 需要改名时，用菜单改名接口改 `menuName`
+3. 如需修改字段，用返回的 `desformCode` 继续 `update_form` 或字段级操作
 
 ## 删除表单
 
@@ -549,7 +553,7 @@ desform 有两种完全独立的视图概念：
 - `references/desform-validation-rules.md` — 涉及校验规则时阅读（rules/defaultRules/pattern/unique）
 - `references/desform-option-datasource.md` — 涉及选项数据源时阅读（静态/系统字典/关联表单/远程函数）
 - `references/desform-remote-api.md` — 涉及远程API取值（remoteAPI）时阅读（动态参数语法、${字段model}传参、返回值规则、触发时机）
-- `references/desform-js-enhance.md` — 涉及 JS 增强时阅读（自定义 JavaScript、API 方法、事件监听）
+- `references/desform-js-enhance.md` — 涉及 JS 增强时阅读（自定义 JavaScript、API 方法、事件监听、子表控件选项设置 `setSubTableOptions`）
 - `references/desform-layout.md` — 涉及布局模式时阅读（auto/half/full/word 四种模式的说明和适用场景）
 - `references/desform-css-enhance.md` — 涉及 CSS 增强时阅读（自定义样式、Word 风格定制）
 - `references/desform-layout-controls.md` — 涉及复杂布局时阅读（AutoGrid/Card/Grid/Tabs）

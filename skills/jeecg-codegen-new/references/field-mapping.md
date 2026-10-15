@@ -30,8 +30,9 @@
 | 用户 / 操作人 / 负责人 | varchar(32) | string | java.lang.String | sel_user | JSelectUserByDept |
 | 部门 / 组织 / 单位 | varchar(32) | string | java.lang.String | sel_depart | JSelectDept |
 | 省市区 / 地址 | varchar(50) | string | java.lang.String | pca | 省市区联动 |
-| 关联（弹窗选择） | varchar(36) | string | java.lang.String | popup | JPopup 关联记录 |
 | 关联（弹窗字典） | varchar(36) | string | java.lang.String | popup_dict | JPopup 字典模式 |
+| 关联（弹窗选择） | varchar(36) | string | java.lang.String | popup | JPopup 关联记录（旧版，依赖在线报表）|
+| 关联（卡片选择） | varchar(36) | string | java.lang.String | link_table | JLinkTableCard，直连业务表，无需在线报表 |
 
 ## classType 与字典三剑客
 
@@ -45,6 +46,7 @@
 | 自定义树字典 | `sel_tree` | `"sys_depart"` | `"id,parent_id,depart_name,has_child"` | `"<root_id>"` | 部门树 |
 | 关联表（弹窗选，单字段回填）| `popup` | `"edu_teacher"` | `"teacher_name"` | `"id"` | 选教师，存 id |
 | 关联表（弹窗选，多字段回填）| `popup` | `"goods_table"` | `"name,code"` | `"id,goods_code"` | 选商品后回填多列；⚠️ dictText 的每个值必须与某个字段的 fieldDbName 一一对应，否则模板 seq_index_of 返回 -1 越界崩溃 |
+| 关联表（卡片选）| `link_table` | `"goods_table"` | `"name"` | `"id"` | JLinkTableCard，直连业务表；可选 extendParams.imageField 指定图片列 |
 
 ## 系统字段约定
 

@@ -400,10 +400,17 @@ def _adv(fmt='string', custom=False, split=''):
         }
     }
 
+# ---- make_widget 的 options 级合法参数白名单 ----
+_VALID_OPTIONS_KWARGS = {
+    'fieldNote', 'hidden', 'hiddenOnAdd', 'disabled', 'placeholder',
+    'unique', 'readonly', 'inline', 'showLabel', 'useColor',
+    'filterable', 'clearable', 'precision', 'allowHalf',
+}
 
 def make_widget(widget_type, name, class_name, icon, options,
                 required=False, is_sub=False, parent_key=None, extra=None,
-                mobile_options=None, model=None, remote_api=None, default_expr=None):
+                mobile_options=None, model=None, remote_api=None, default_expr=None,
+                **kwargs):
     """创建控件（通用工厂），返回 (widget_dict, key, model)
 
     Args:
@@ -421,6 +428,15 @@ def make_widget(widget_type, name, class_name, icon, options,
     key = _gen_key()
     model = model or _gen_model(widget_type)
     _sleep()
+
+    # 合并透传的 options 级参数（白名单校验，防 AI 杜撰参数静默写入）
+    if kwargs:
+        unknown = set(kwargs) - _VALID_OPTIONS_KWARGS
+        if unknown:
+            print(f'  ⚠ [警告] make_widget("{name}") 收到非白名单参数: {sorted(unknown)}，已忽略')
+        for k, v in kwargs.items():
+            if k in _VALID_OPTIONS_KWARGS:
+                options[k] = v
 
     fmt = "number" if widget_type in ("number", "integer", "money", "slider") else "string"
     custom = widget_type in ("radio", "checkbox", "select", "link-record", "sub-table-design")
@@ -625,6 +641,85 @@ def SUMMARY(name, sub_table_model, field_model, summary_type='inner-sum',
         },
         "key": key, "model": model, "modelType": "main",
         "rules": [], "isSubItem": False
+    }
+    if wrap:
+        return _card_wrap(w, key, model)
+    return w, key, model
+
+
+def SUMMARY_DATE(name, sub_table_model, field_model, summary_type='inner-date-earliest',
+                 date_type='date', fmt='yyyy-MM-dd', filter=None, *, wrap=True):
+    """汇总日期控件 — 对子表日期列做最早/最晚聚合（只能在主表使用，不能在子表内使用）。
+
+    这是 type="date" + isSummary=true 的特殊控件，内部通过 __summary__date 前缀注册以区分普通日期选择器。
+
+    Args:
+        name: 控件名称
+        sub_table_model: 子表的 model，如 'sub_table_design_xxx'
+        field_model: 要汇总的子表日期列。支持三种传法：
+            - 字符串 model（如 'date_xxx'）
+            - widget tuple（如 SUB_DATE 的返回值）
+            - widget dict（从子表 columns 中取出的控件对象）
+            传 widget 时会自动提取 model，并用其 options.designType 覆盖 date_type 和 fmt
+        summary_type: 仅 'inner-date-earliest'(最早) 或 'inner-date-latest'(最晚)
+        date_type: 'date' 或 'datetime'。传 widget 时会被自动覆盖为字段的 designType
+        fmt: 日期输出格式。传 widget 时会被自动覆盖为字段的 format
+        filter: 过滤条件
+        wrap: 是否包裹 AutoGrid card（默认 True）
+
+    用法:
+        date_field = SUB_DATE('日期字段', parent_key)
+        earliest = SUMMARY_DATE('最早日期', sub_table['model'], date_field)
+        # date_type 和 fmt 自动从 date_field 的 options 中提取
+    """
+    # 自动提取：如果传的是 widget tuple/dict，提取 model 并同步 designType/format
+    field_widget = None
+    if isinstance(field_model, (list, tuple)):
+        # widget tuple: (widget_dict, key, model)
+        field_widget = field_model[0]
+        field_model = field_model[2] if len(field_model) > 2 else field_model[0].get('model', field_model)
+    elif isinstance(field_model, dict) and 'options' in field_model:
+        field_widget = field_model
+        field_model = field_widget.get('model', field_model)
+
+    if field_widget:
+        field_opts = field_widget.get('options', {})
+        field_dt = field_opts.get('designType', 'date')
+        if field_dt in ('date', 'datetime'):
+            date_type = field_dt
+            fmt = field_opts.get('format', 'yyyy-MM-dd' if field_dt == 'date' else 'yyyy-MM-dd HH:mm:ss')
+
+    if date_type == 'datetime' and fmt == 'yyyy-MM-dd':
+        fmt = 'yyyy-MM-dd HH:mm:ss'
+    key = _gen_key()
+    model = _gen_model("date")
+    _sleep()
+    default_filter = {"enabled": False, "rules": [], "matchType": "AND"}
+    w = {
+        "type": "date", "name": name,
+        "className": "form-summary-date", "icon": "icon-sigma",
+        "isSummary": True,
+        "hideTitle": False,
+        "options": {
+            "linkTable": sub_table_model,
+            "field": field_model,
+            "summary": summary_type,
+            "type": date_type,
+            "designType": date_type,
+            "format": fmt,
+            "timestamp": True,
+            "defaultValue": "",
+            "filter": filter if filter else default_filter,
+            "hidden": False, "hiddenOnAdd": False, "required": False, "fieldNote": "",
+        },
+        "key": key, "model": model, "modelType": "main",
+        "rules": [], "isSubItem": False,
+        "advancedSetting": {
+            "defaultValue": {
+                "type": "compose", "value": "", "format": "string",
+                "allowFunc": True, "valueSplit": "", "customConfig": False,
+            }
+        }
     }
     if wrap:
         return _card_wrap(w, key, model)
@@ -848,7 +943,7 @@ def SWITCH(name, active='Y', inactive='N', width=100,
     return _finalize(w, k, m, wrap, is_sub, col_width)
 
 
-def _make_options_list(options, colors=None):
+def _make_options_list(options, colors=None, field_name=None):
     """将简单字符串列表或 dict 列表转为 options 数组。
 
     支持两种输入格式：
@@ -857,12 +952,37 @@ def _make_options_list(options, colors=None):
       注：label 与 value 不同时，label 会被保留在输出中；调用方应同步将 showLabel 设为 True。
 
     注意：value 必须是简单字符串，不能是嵌套对象，否则渲染时显示 [object Object]。
+
+    颜色规则：
+    - 如果选项已自带合法的 itemColor（在合法 20 色列表中），直接保留
+    - 否则从 default_colors 按索引循环分配
     """
-    default_colors = ["#2196F3", "#08C9C9", "#00C345", "#FF9800", "#9C27B0", "#795548", "#607D8B", "#E91E63"]
+    # 合法 20 色（与前端 src/data/colors.js 的 Colors 数组完全一致）
+    default_colors = [
+        "#2196F3", "#08C9C9", "#00C345", "#FAD714", "#FF9300",
+        "#F52222", "#EB2F96", "#7500EA", "#2D46C4", "#484848",
+        "#C9E6FC", "#C3F2F2", "#C2F1D2", "#FEF6C6", "#FFE5C2",
+        "#FDCACA", "#FACDE6", "#DEC2FA", "#CCD2F1", "#D3D3D3",
+    ]
     result = []
     for i, opt in enumerate(options):
-        c = (colors[i] if colors and i < len(colors)
-             else default_colors[i % len(default_colors)])
+            # 如果用户指定了 itemColor，必须在合法列表中，否则报错
+        user_color = None
+        if isinstance(opt, dict):
+            user_color = opt.get('itemColor')
+        if user_color:
+            if user_color in default_colors:
+                c = user_color
+            else:
+                raise ValueError(
+                    f'字段 "{field_name}" 的选项 "{opt.get("value", opt)}" 使用了非法颜色值 "{user_color}"，'
+                    f'不在合法 20 色列表中。请从以下颜色中选择：\n'
+                    f'  {"  ".join(default_colors)}'
+                )
+        elif colors and i < len(colors) and colors[i] in default_colors:
+            c = colors[i]
+        else:
+            c = default_colors[i % len(default_colors)]
         # dict 格式时提取 value 字段，避免嵌套对象导致 [object Object]
         if isinstance(opt, dict):
             val = opt.get('value', opt.get('label', str(opt)))
@@ -880,18 +1000,23 @@ def _make_options_list(options, colors=None):
 def RADIO(name, options, required=False, width=100, dict_code=None,
           *, wrap=True, is_sub=False, parent_key=None, col_width='200px', **kw):
     """单选框组。options: 字符串列表 或 dict_code 指定系统字典"""
-    options_list = _make_options_list(options) if options else []
+    options_list = _make_options_list(options, field_name=name) if options else []
+    show_label = kw.pop('showLabel', None)
+    if show_label is None:
+        show_label = any("label" in o for o in options_list)
     opts = {
-        "inline": True, "matrixWidth": 120, "defaultValue": "",
-        "showType": "default",
-        "showLabel": any("label" in o for o in options_list),
-        "useColor": False,
+        "inline": kw.pop('inline', True), "matrixWidth": 120, "defaultValue": "",
+        "showType": kw.pop('showType', 'default'),
+        "showLabel": show_label,
+        "useColor": kw.pop('useColor', False),
         "colorIteratorIndex": 3,
         "options": options_list,
         "required": required, "width": "", "remote": False,
         "remoteOptions": [], "props": {"value": "value", "label": "label"},
-        "remoteFunc": "", "disabled": False, "hidden": False,
-        "hiddenOnAdd": False, "fieldNote": "",
+        "remoteFunc": "", "disabled": False,
+        "hidden": kw.pop('hidden', False),
+        "hiddenOnAdd": kw.pop('hiddenOnAdd', False),
+        "fieldNote": kw.pop('fieldNote', ''),
     }
     if not is_sub:
         opts["autoWidth"] = width
@@ -909,17 +1034,22 @@ def RADIO(name, options, required=False, width=100, dict_code=None,
 
 def CHECKBOX(name, options, required=False, width=100, dict_code=None,
              *, wrap=True, is_sub=False, parent_key=None, col_width='200px', **kw):
-    options_list = _make_options_list(options) if options else []
+    options_list = _make_options_list(options, field_name=name) if options else []
+    show_label = kw.pop('showLabel', None)
+    if show_label is None:
+        show_label = any("label" in o for o in options_list)
     opts = {
-        "inline": True, "matrixWidth": 120, "defaultValue": [],
-        "showLabel": any("label" in o for o in options_list),
-        "showType": "default", "useColor": False,
+        "inline": kw.pop('inline', True), "matrixWidth": 120, "defaultValue": [],
+        "showLabel": show_label,
+        "showType": kw.pop('showType', 'default'), "useColor": kw.pop('useColor', False),
         "colorIteratorIndex": 3,
         "options": options_list,
         "required": required, "width": "", "remote": False,
         "remoteOptions": [], "props": {"value": "value", "label": "label"},
-        "remoteFunc": "", "disabled": False, "hidden": False,
-        "hiddenOnAdd": False, "fieldNote": "",
+        "remoteFunc": "", "disabled": False,
+        "hidden": kw.pop('hidden', False),
+        "hiddenOnAdd": kw.pop('hiddenOnAdd', False),
+        "fieldNote": kw.pop('fieldNote', ''),
     }
     if not is_sub:
         opts["autoWidth"] = width
@@ -938,19 +1068,24 @@ def CHECKBOX(name, options, required=False, width=100, dict_code=None,
 def SELECT(name, options, required=False, width=100, multiple=False, dict_code=None,
            placeholder='',
            *, wrap=True, is_sub=False, parent_key=None, col_width='150px', **kw):
-    options_list = _make_options_list(options) if options else []
+    options_list = _make_options_list(options, field_name=name) if options else []
+    show_label = kw.pop('showLabel', None)
+    if show_label is None:
+        show_label = any("label" in o for o in options_list)
     opts = {
         "defaultValue": "" if not multiple else [],
         "multiple": multiple, "disabled": False, "clearable": True,
         "placeholder": placeholder, "required": required,
-        "showLabel": any("label" in o for o in options_list),
-        "showType": "default", "width": "", "useColor": False,
+        "showLabel": show_label,
+        "showType": kw.pop('showType', 'default'), "width": "", "useColor": kw.pop('useColor', False),
         "colorIteratorIndex": 3,
         "options": options_list,
-        "remote": False, "filterable": False,
+        "remote": False, "filterable": kw.pop('filterable', False),
         "remoteOptions": [], "props": {"value": "value", "label": "label"},
-        "remoteFunc": "", "hidden": False, "hiddenOnAdd": False,
-        "fieldNote": "",
+        "remoteFunc": "",
+        "hidden": kw.pop('hidden', False),
+        "hiddenOnAdd": kw.pop('hiddenOnAdd', False),
+        "fieldNote": kw.pop('fieldNote', ''),
     }
     if not is_sub:
         opts["autoWidth"] = width
@@ -1070,12 +1205,12 @@ def ORG_ROLE(name, required=False, width=100, multiple=False, placeholder='选�
     return _finalize(w, k, m, wrap, is_sub, col_width)
 
 
-def DEPART_POST(name, required=False, width=100, placeholder='',
+def DEPART_POST(name, required=False, width=100, multiple=False, placeholder='',
                 *, wrap=True, is_sub=False, parent_key=None, col_width='200px', **kw):
     """岗位组件"""
     opts = {
         "keyMaps": [], "defaultValue": "", "defaultLogin": False,
-        "placeholder": placeholder, "width": "100%", "multiple": False,
+        "placeholder": placeholder, "width": "100%", "multiple": multiple,
         "disabled": False, "customReturnField": "id",
         "hidden": False, "dataAuthType": "member",
         "hiddenOnAdd": False, "required": required, "fieldNote": "",
@@ -1631,114 +1766,122 @@ def FORMULA(name, mode='CUSTOM', expression='', fields=None,
 # 子表控件别名（向后兼容，推荐直接使用主函数 + is_sub=True）
 # ============================================================
 
-def SUB_INPUT(name, parent_key, required=False, col_width='200px'):
-    return INPUT(name, required=required, wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width)
+def SUB_INPUT(name, parent_key, required=False, col_width='200px', **kw):
+    return INPUT(name, required=required, wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width, **kw)
 
-def SUB_INTEGER(name, parent_key, required=False, col_width='120px', unit=''):
-    return INTEGER(name, required=required, unit=unit, wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width)
+def SUB_INTEGER(name, parent_key, required=False, col_width='120px', unit='', **kw):
+    return INTEGER(name, required=required, unit=unit, wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width, **kw)
 
-def SUB_NUMBER(name, parent_key, required=False, col_width='120px', unit=''):
-    return NUMBER(name, required=required, unit=unit, wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width)
+def SUB_NUMBER(name, parent_key, required=False, col_width='120px', unit='', **kw):
+    return NUMBER(name, required=required, unit=unit, wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width, **kw)
 
-def SUB_MONEY(name, parent_key, required=False, col_width='150px', unit='元'):
-    return MONEY(name, required=required, unit=unit, wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width)
+def SUB_MONEY(name, parent_key, required=False, col_width='150px', unit='元', **kw):
+    return MONEY(name, required=required, unit=unit, wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width, **kw)
 
-def SUB_SELECT(name, parent_key, options, required=False, col_width='150px'):
-    return SELECT(name, options, required=required, wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width)
+def SUB_SELECT(name, parent_key, options, required=False, col_width='150px', **kw):
+    return SELECT(name, options, required=required, wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width, **kw)
 
-def SUB_DATE(name, parent_key, required=False, col_width='180px'):
-    return DATE(name, required=required, wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width)
+def SUB_DATE(name, parent_key, required=False, col_width='180px', **kw):
+    return DATE(name, required=required, wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width, **kw)
 
-def SUB_TIME(name, parent_key, required=False, col_width='150px'):
-    return TIME(name, required=required, wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width)
+def SUB_TIME(name, parent_key, required=False, col_width='150px', **kw):
+    return TIME(name, required=required, wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width, **kw)
 
-def SUB_SWITCH(name, parent_key, active='Y', inactive='N', col_width='100px'):
-    return SWITCH(name, active=active, inactive=inactive, wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width)
+def SUB_SWITCH(name, parent_key, active='Y', inactive='N', col_width='100px', **kw):
+    return SWITCH(name, active=active, inactive=inactive, wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width, **kw)
 
-def SUB_RADIO(name, parent_key, options, required=False, col_width='200px', dict_code=None):
-    return RADIO(name, options, required=required, dict_code=dict_code, wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width)
+def SUB_RADIO(name, parent_key, options, required=False, col_width='200px', dict_code=None, **kw):
+    return RADIO(name, options, required=required, dict_code=dict_code, wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width, **kw)
 
-def SUB_CHECKBOX(name, parent_key, options, required=False, col_width='200px', dict_code=None):
-    return CHECKBOX(name, options, required=required, dict_code=dict_code, wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width)
+def SUB_CHECKBOX(name, parent_key, options, required=False, col_width='200px', dict_code=None, **kw):
+    return CHECKBOX(name, options, required=required, dict_code=dict_code, wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width, **kw)
 
-def SUB_TEXTAREA(name, parent_key, required=False, col_width='250px'):
-    return TEXTAREA(name, required=required, wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width)
+def SUB_TEXTAREA(name, parent_key, required=False, col_width='250px', **kw):
+    return TEXTAREA(name, required=required, wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width, **kw)
 
-def SUB_SLIDER(name, parent_key, col_width='200px', min_val=0, max_val=100):
-    return SLIDER(name, min_val=min_val, max_val=max_val, wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width)
+def SUB_SLIDER(name, parent_key, col_width='200px', min_val=0, max_val=100, **kw):
+    return SLIDER(name, min_val=min_val, max_val=max_val, wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width, **kw)
 
-def SUB_RATE(name, parent_key, col_width='150px', max_val=5):
-    return RATE(name, max_val=max_val, wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width)
+def SUB_RATE(name, parent_key, col_width='150px', max_val=5, **kw):
+    return RATE(name, max_val=max_val, wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width, **kw)
 
-def SUB_COLOR(name, parent_key, col_width='120px'):
-    return COLOR(name, wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width)
+def SUB_COLOR(name, parent_key, col_width='120px', **kw):
+    return COLOR(name, wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width, **kw)
 
-def SUB_USER(name, parent_key, required=False, col_width='200px', multiple=False):
-    return USER(name, required=required, multiple=multiple, wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width)
+def SUB_USER(name, parent_key, required=False, col_width='200px', multiple=False, **kw):
+    return USER(name, required=required, multiple=multiple, wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width, **kw)
 
-def SUB_DEPART(name, parent_key, required=False, col_width='200px', multiple=False):
-    return DEPART(name, required=required, multiple=multiple, wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width)
+def SUB_DEPART(name, parent_key, required=False, col_width='200px', multiple=False, **kw):
+    return DEPART(name, required=required, multiple=multiple, wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width, **kw)
 
-def SUB_DEPART_POST(name, parent_key, required=False, col_width='200px'):
-    return DEPART_POST(name, required=required, wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width)
+def SUB_DEPART_POST(name, parent_key, required=False, col_width='200px', **kw):
+    return DEPART_POST(name, required=required, wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width, **kw)
 
-def SUB_ORG_ROLE(name, parent_key, required=False, col_width='200px', multiple=False):
-    return ORG_ROLE(name, required=required, multiple=multiple, wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width)
+def SUB_ORG_ROLE(name, parent_key, required=False, col_width='200px', multiple=False, **kw):
+    return ORG_ROLE(name, required=required, multiple=multiple, wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width, **kw)
 
-def SUB_PHONE(name, parent_key, required=False, col_width='180px'):
-    return PHONE(name, required=required, wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width)
+def SUB_PHONE(name, parent_key, required=False, col_width='180px', **kw):
+    return PHONE(name, required=required, wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width, **kw)
 
-def SUB_EMAIL(name, parent_key, required=False, col_width='200px'):
-    return EMAIL(name, required=required, wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width)
+def SUB_EMAIL(name, parent_key, required=False, col_width='200px', **kw):
+    return EMAIL(name, required=required, wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width, **kw)
 
-def SUB_AREA(name, parent_key, required=False, col_width='250px'):
-    return AREA(name, required=required, wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width)
+def SUB_AREA(name, parent_key, required=False, col_width='250px', **kw):
+    return AREA(name, required=required, wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width, **kw)
 
-def SUB_IMGUPLOAD(name, parent_key, required=False, col_width='150px'):
+def SUB_IMGUPLOAD(name, parent_key, required=False, col_width='150px', **kw):
     """子表图片上传。缩略图自动缩小为 50x50（主表默认 100x100）。"""
-    return IMGUPLOAD(name, required=required, wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width)
+    return IMGUPLOAD(name, required=required, wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width, **kw)
 
-def SUB_FILE(name, parent_key, required=False, col_width='200px'):
-    return FILE(name, required=required, wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width)
+def SUB_FILE(name, parent_key, required=False, col_width='200px', **kw):
+    return FILE(name, required=required, wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width, **kw)
 
 def SUB_TABLE_DICT(name, parent_key, dict_table='', dict_code_col='', dict_text_col='',
                    required=False, col_width='200px', multiple=False, style='select',
-                   query_scope='cgreport', filterable=True, clearable=True, disabled=False):
+                   query_scope='cgreport', filterable=True, clearable=True, disabled=False,
+                   **kw):
     return TABLE_DICT(name, dict_table=dict_table, dict_code_col=dict_code_col,
                       dict_text_col=dict_text_col, required=required,
                       multiple=multiple, style=style, query_scope=query_scope,
                       filterable=filterable, clearable=clearable, disabled=disabled,
-                      wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width)
+                      wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width,
+                      **kw)
 
 def SUB_SELECT_TREE(name, parent_key, category_code='', required=False, col_width='200px',
-                    multiple=False, disabled=False, data_from='category', table_conf=None):
+                    multiple=False, disabled=False, data_from='category', table_conf=None,
+                    **kw):
     return SELECT_TREE(name, category_code=category_code, required=required,
                        multiple=multiple, disabled=disabled,
                        data_from=data_from, table_conf=table_conf,
-                       wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width)
+                       wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width,
+                       **kw)
 
 def SUB_LINK_RECORD(name, parent_key, source_code, title_field, show_fields=None,
-                    required=False, col_width='200px'):
+                    required=False, col_width='200px', **kw):
     return LINK_RECORD(name, source_code, title_field, show_fields=show_fields,
-                       required=required, wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width)
+                       required=required, wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width,
+                       **kw)
 
 def SUB_LINK_FIELD(name, parent_key, link_record_key, show_field,
-                   field_type='input', field_options=None, col_width='150px'):
+                   field_type='input', field_options=None, col_width='150px', **kw):
     return LINK_FIELD(name, link_record_key, show_field, field_type=field_type,
-                      field_options=field_options, wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width)
+                      field_options=field_options, wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width,
+                      **kw)
 
 def SUB_FORMULA(name, parent_key, mode='CUSTOM', expression='', col_width='150px', unit='',
                 fields=None, date_begin='', date_end='', date_format_method=1,
-                date_print_unit='m', date_add_exp='', date_print_format='YYYY-MM-DD'):
+                date_print_unit='m', date_add_exp='', date_print_format='YYYY-MM-DD',
+                **kw):
     """子表公式控件（向后兼容别名）。详见 FORMULA() 文档。"""
     return FORMULA(name, mode=mode, expression=expression, unit=unit,
                    fields=fields, date_begin=date_begin, date_end=date_end,
                    date_format_method=date_format_method, date_print_unit=date_print_unit,
                    date_add_exp=date_add_exp, date_print_format=date_print_format,
-                   wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width)
+                   wrap=False, is_sub=True, parent_key=parent_key, col_width=col_width,
+                   **kw)
 
 
-def SUB_PRODUCT(name, parent_key, field_models, col_width='150px', unit=''):
+def SUB_PRODUCT(name, parent_key, field_models, col_width='150px', unit='', **kw):
     """子表乘积公式（快捷方式）—— formula 控件 PRODUCT 模式的语法糖。
 
     等价于 SUB_FORMULA(name, parent_key, mode='PRODUCT', expression='$a$*$b$')，
@@ -2125,6 +2268,7 @@ def save_design(form_id, form_code, widgets, title_model, update_count=1, form_s
     """
     design_json = build_design_json(widgets, title_model, form_style, expand=expand,
                                     config_overrides=config_overrides)
+    design_json = _auto_fill_linkdata_sqparam(design_json)
     payload = {
         'id': form_id,
         'desformDesignJson': json.dumps(design_json, ensure_ascii=False),
@@ -2540,12 +2684,104 @@ def export_design_json(code, output_path=None):
     return output_path, field_rows
 
 
+# linkData rules[].rule → superQueryType 映射
+_LINKDATA_RULE_SQ_TYPE = {
+    'EQ': 'eq', 'NE': 'ne',
+    'IN': 'like', 'NOT_IN': 'not_like',
+    'IS_ONE_OF': 'in', 'NOT_IS_ONE_OF': 'not_in',
+    'EMPTY': 'empty', 'NOT_EMPTY': 'not_empty',
+}
+
+
+def _flatten_design_list(items):
+    """展平设计 JSON 的 list 树（card 容器 → 实际控件）"""
+    result = []
+    for item in items:
+        if item.get('type') == 'card':
+            result.extend(_flatten_design_list(item.get('list', [])))
+        else:
+            result.append(item)
+    return result
+
+
+def _auto_fill_linkdata_sqparam(design_json):
+    """自动填充设计 JSON 中所有 linkData 控件的 sqParam。
+
+    遍历每个控件，发现 options.remote == 'linkData' 时：
+    1. 调用 /desform/api/fields/{desformCode} 查询目标表字段
+    2. 根据 rule 中的 model 匹配目标字段类型（同 getSuperQueryType 逻辑）
+    3. 根据 rule code 查 superQueryType
+    4. 写入 sqParam: {type: 目标字段类型, rule: superQueryType}
+    """
+    _fields_cache = {}
+    modified = 0
+
+    widgets = _flatten_design_list(design_json.get('list', []))
+    for w in widgets:
+        opts = w.get('options', {})
+        cfg = opts.get('linkDataConfig')
+        if not cfg or opts.get('remote') != 'linkData':
+            continue
+        rules = cfg.get('rules')
+        if not rules:
+            continue
+
+        desform_code = cfg['desformCode']
+        # 缓存目标表字段
+        if desform_code not in _fields_cache:
+            try:
+                r = api_request(f'/desform/api/fields/{desform_code}', method='GET')
+                if r.get('success'):
+                    _fields_cache[desform_code] = r['result']['fields']
+                else:
+                    _fields_cache[desform_code] = []
+            except Exception:
+                _fields_cache[desform_code] = []
+
+        target_fields = _fields_cache[desform_code]
+        if not target_fields:
+            continue
+
+        for rule in rules:
+            model = rule.get('model', '')
+            # 匹配目标字段，返回 sqParam.type
+            field_type = 'text'
+            for f in target_fields:
+                if f.get('model') == model or f.get('value') == model:
+                    wtype = f.get('type', 'text')
+                    # getSuperQueryType 等价逻辑
+                    if wtype == 'formula':
+                        fopts = f.get('options', {})
+                        if fopts.get('type') == 'date':
+                            field_type = 'input'
+                        else:
+                            field_type = 'number'
+                    elif wtype == 'link-field':
+                        field_type = f.get('options', {}).get('fieldType', 'text')
+                    elif wtype == 'date':
+                        field_type = f.get('options', {}).get('type', 'date')
+                    else:
+                        field_type = wtype
+                    break
+
+            rule_code = rule.get('rule', '')
+            sq_type = _LINKDATA_RULE_SQ_TYPE.get(rule_code, 'eq')
+            rule['sqParam'] = {'type': field_type, 'rule': sq_type}
+            modified += 1
+
+    if modified > 0:
+        print(f'  已自动填充 {modified} 条 linkData sqParam')
+    return design_json
+
+
 def save_design_from_file(code, file_path):
     """从文件读取设计 JSON 并保存到后台（预处理功能的最后一步）
 
     适用于：
     - desform_creator.py --preprocess 生成临时文件，AI 修改后调用本函数保存
     - export_design_json() 导出后，AI 修改后调用本函数保存
+
+    保存前会自动填充 linkData 控件的 sqParam，无需手工处理。
 
     Args:
         code:      表单编码
@@ -2556,6 +2792,9 @@ def save_design_from_file(code, file_path):
     """
     with open(file_path, 'r', encoding='utf-8') as f:
         design_json = json.load(f)
+
+    # 自动填充 linkData 的 sqParam
+    design_json = _auto_fill_linkdata_sqparam(design_json)
 
     # 获取最新 updateCount（避免版本冲突）
     form_data = query_form(code)
@@ -2657,6 +2896,7 @@ def update_design_config(code, config_updates):
     _deep_merge_config(current_config, config_updates)
     design_json['config'] = current_config
 
+    design_json = _auto_fill_linkdata_sqparam(design_json)
     payload = {
         'id': fid,
         'desformDesignJson': json.dumps(design_json, ensure_ascii=False),
@@ -2976,28 +3216,71 @@ def create_form(name, code, widgets, title_index=0, layout='auto', expand=None,
 # ============================================================
 # 表单复制
 # ============================================================
-def copy_form(source_code, new_code=None):
-    """复制表单
+def copy_form(source_code, new_code=None, app_id=None):
+    """复制工作表（与前端「复制工作表」一致）
+
+    调用 `POST /online/lowAppMenu/copy`：后端复制表单设计（含视图、按钮等配置），
+    并在同一应用、同一分组下新建菜单，名称为「原名-复制」，新表单编码由后端自动生成。
+
+    ⚠️ 2026-10-14 起 `/desform/api/copyDesignForm` 改为微服务内部接口（`/desform/inner/api`），
+    单体模式下不存在，不能再直接调用。
 
     Args:
-        source_code: 源表单编码
-        new_code: 新表单编码（可选，不传则自动生成）
+        source_code: 源表单编码，表单必须已挂在低代码应用的菜单下
+        new_code: 不支持，后端不能指定新编码；传了会报错
+        app_id: 表单所属应用 ID，不传则取表单的 lowAppId，再取 init_lowapp 设置的当前应用
 
     Returns:
-        新表单信息 dict
+        dict: {menuId, menuName, desformCode, formId, appId}
 
-    注意:
-        后端 LowAppCopyMenu 不支持 newFormName 参数，新表单名称由后端自动生成。
+    Raises:
+        ValueError: 传了 new_code
+        RuntimeError: 表单不存在、不在应用菜单下，或复制失败
     """
-    body = {"originFormCode": source_code}
+    global _LOW_APP_ID
     if new_code:
-        body["newFormCode"] = new_code
-    r = api_request('/desform/api/copyDesignForm', data=body, method='PUT')
-    if r.get('success'):
-        print(f"[copy_form] 复制成功: {source_code} → {new_code or '(自动编码)'}")
-        return r.get('result')
-    else:
-        raise RuntimeError(f"复制失败: {r.get('message', '未知错误')}")
+        raise ValueError('copy_form 不支持指定新编码：后端自动生成编码，复制后可用返回的 desformCode')
+    form = query_form(source_code)
+    if not form:
+        raise RuntimeError(f'表单不存在: {source_code}')
+    aid = str(app_id or form.get('lowAppId') or _LOW_APP_ID or '')
+    if not aid:
+        raise RuntimeError(f'表单 {source_code} 不在任何低代码应用下，前端也没有复制入口；请先把表单加到应用里再复制')
+
+    def _menus():
+        r = api_request(f'/online/lowAppMenu/queryMenus?appId={aid}', method='GET')
+        return ((r.get('result') or {}).get('menuList') or []) if r.get('success') else []
+
+    old_app = _LOW_APP_ID
+    _LOW_APP_ID = aid
+    try:
+        before = _menus()
+        src = next((m for m in before if m.get('type') in ('form', 'desform')
+                    and source_code in (m.get('desformCode'), m.get('menuUrl'))), None)
+        if not src:
+            raise RuntimeError(f'应用 {aid} 的菜单里没有表单 {source_code}，无法复制')
+        r = api_request('/online/lowAppMenu/copy', data={'id': src['id']}, method='POST')
+        if not r.get('success'):
+            raise RuntimeError(f"复制失败: {r.get('message', '未知错误')}")
+        before_ids = {m['id'] for m in before}
+        added = [m for m in _menus() if m['id'] not in before_ids and m.get('type') == src.get('type')]
+    finally:
+        _LOW_APP_ID = old_app
+
+    want = f"{src.get('menuName')}-复制"
+    hit = next((m for m in added if m.get('menuName') == want), added[0] if added else None)
+    if not hit:
+        raise RuntimeError('复制接口返回成功，但没有找到新菜单，请到应用里核对')
+    is_id_form = hit.get('type') == 'form'
+    result = {
+        'menuId': hit['id'],
+        'menuName': hit.get('menuName'),
+        'desformCode': hit.get('desformCode') if is_id_form else hit.get('menuUrl'),
+        'formId': hit.get('menuUrl') if is_id_form else None,
+        'appId': aid,
+    }
+    print(f"[copy_form] 复制成功: {source_code} → {result['desformCode']}（菜单「{result['menuName']}」）")
+    return result
 
 
 # ============================================================

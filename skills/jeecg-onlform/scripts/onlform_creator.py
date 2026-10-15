@@ -243,22 +243,58 @@ def _build_ext_config(table_config):
 
 
 def build_fields_from_config(field_configs, table_config=None):
-    """从配置列表构建字段数组（含系统字段，树表自动加 name/pid/has_child）"""
-    fields = make_system_fields()
+    """从配置列表构建字段数组（含系统字段，树表自动加 name/pid/has_child）
+
+    排序规则：
+    1. 主键 id 始终放在第一位；
+    2. 业务字段（含树表的 name/pid）紧跟 id；
+    3. 系统字段（create_by/create_time/update_by/update_time/sys_org_code）放到业务字段后面；
+    4. 树表 has_child 始终放在最后。
+    """
+    fields = []
+    sys_fields = make_system_fields()
+
+    # 1. 主键 id 始终放在第一位
+    id_field = next((f for f in sys_fields if f['dbFieldName'] == 'id'), None)
+    if id_field:
+        id_field['orderNum'] = 0
+        fields.append(id_field)
+
+    # 2. 业务字段（含树表字段）紧跟 id
+    biz_order_start = 1
+    tree_child_field = None
+
     if table_config and table_config.get('isTree') == 'Y':
         existing_names = {f.get('dbFieldName', '') for f in field_configs}
         tree_name = table_config.get('treeFieldname', 'name')
         tree_pid = table_config.get('treeParentIdField', 'pid')
         tree_child = table_config.get('treeIdField', 'has_child')
         if tree_name not in existing_names:
-            fields.append({"id": rand_id(tree_name[:8]), "dbFieldName": tree_name, "dbFieldTxt": "节点名称", "queryConfigFlag": "0", "fieldMustInput": "1", "isShowForm": "1", "isShowList": "1", "isReadOnly": "0", "fieldShowType": "text", "fieldLength": 200, "isQuery": "1", "queryMode": "single", "dbLength": 200, "dbPointLength": 0, "dbType": "string", "dbIsKey": "0", "dbIsNull": "0", "orderNum": 1})
-        # pid 紧跟 name(orderNum=2)，仅表单可见(树列已展示层级，列表无需再显父节点)
+            fields.append({"id": rand_id(tree_name[:8]), "dbFieldName": tree_name, "dbFieldTxt": "节点名称", "queryConfigFlag": "0", "fieldMustInput": "1", "isShowForm": "1", "isShowList": "1", "isReadOnly": "0", "fieldShowType": "text", "fieldLength": 200, "isQuery": "1", "queryMode": "single", "dbLength": 200, "dbPointLength": 0, "dbType": "string", "dbIsKey": "0", "dbIsNull": "0", "orderNum": biz_order_start})
+            biz_order_start += 1
+        # pid 紧跟 name，仅表单可见(树列已展示层级，列表无需再显父节点)
         if tree_pid not in existing_names:
-            fields.append({"id": rand_id(tree_pid[:8]), "dbFieldName": tree_pid, "dbFieldTxt": "父节点", "queryConfigFlag": "0", "fieldMustInput": "0", "isShowForm": "1", "isShowList": "0", "isReadOnly": "0", "fieldShowType": "text", "fieldLength": 120, "isQuery": "0", "queryMode": "single", "dbLength": 36, "dbPointLength": 0, "dbType": "string", "dbIsKey": "0", "dbIsNull": "1", "orderNum": 2})
+            fields.append({"id": rand_id(tree_pid[:8]), "dbFieldName": tree_pid, "dbFieldTxt": "父节点", "queryConfigFlag": "0", "fieldMustInput": "0", "isShowForm": "1", "isShowList": "0", "isReadOnly": "0", "fieldShowType": "text", "fieldLength": 120, "isQuery": "0", "queryMode": "single", "dbLength": 36, "dbPointLength": 0, "dbType": "string", "dbIsKey": "0", "dbIsNull": "1", "orderNum": biz_order_start})
+            biz_order_start += 1
         if tree_child not in existing_names:
-            fields.append({"id": rand_id(tree_child[:8]), "dbFieldName": tree_child, "dbFieldTxt": "是否有子节点", "queryConfigFlag": "0", "fieldMustInput": "0", "isShowForm": "0", "isShowList": "0", "isReadOnly": "0", "fieldShowType": "text", "fieldLength": 120, "isQuery": "0", "queryMode": "single", "dbLength": 1, "dbPointLength": 0, "dbType": "string", "dbIsKey": "0", "dbIsNull": "1", "orderNum": 999})
+            tree_child_field = {"id": rand_id(tree_child[:8]), "dbFieldName": tree_child, "dbFieldTxt": "是否有子节点", "queryConfigFlag": "0", "fieldMustInput": "0", "isShowForm": "0", "isShowList": "0", "isReadOnly": "0", "fieldShowType": "text", "fieldLength": 120, "isQuery": "0", "queryMode": "single", "dbLength": 1, "dbPointLength": 0, "dbType": "string", "dbIsKey": "0", "dbIsNull": "1", "orderNum": 999}
+
     for i, fc in enumerate(field_configs):
-        fields.append(_make_field_from_config(fc, 6 + i))
+        fields.append(_make_field_from_config(fc, biz_order_start + i))
+
+    # 3. 系统字段（除 id 外）放到业务字段后面
+    current_order = len(fields)
+    for f in sys_fields:
+        if f['dbFieldName'] != 'id':
+            f['orderNum'] = current_order
+            fields.append(f)
+            current_order += 1
+
+    # 4. 树表 has_child 始终放在最后
+    if tree_child_field:
+        tree_child_field['orderNum'] = current_order
+        fields.append(tree_child_field)
+
     return fields
 
 
@@ -337,7 +373,7 @@ def create_table(api_base, token, table_config):
             if not has_fk:
                 fk_field_name = f'{main_table}_id'
                 fk_field = make_field(
-                    order=1,
+                    order=9999,
                     db_name=fk_field_name,
                     db_txt='主表ID',
                     show_type='text',
@@ -348,12 +384,14 @@ def create_table(api_base, token, table_config):
                     main_table=main_table,
                     main_field=main_field,
                 )
-                fields.insert(0, fk_field)
+                fields.append(fk_field)
                 print(f'  [自动] 注入外键字段 {fk_field_name}（主表={main_table}, 主字段={main_field}）')
 
     # 自动添加 bpm_status 字段（如果配置了 bpmForm: true）
     if table_config.get('bpmForm', False):
-        bpm_status_field = {
+        # 走 _make_field_from_config 生成完整结构（含 orderNum/dbPointLength/dbIsKey 等），
+        # 缺这些属性会导致 Oracle 库 Hibernate 同步报 "Error accessing stax stream"
+        bpm_status_field = _make_field_from_config({
             "dbFieldName": "bpm_status",
             "dbFieldTxt": "流程状态",
             "fieldShowType": "list",
@@ -364,7 +402,7 @@ def create_table(api_base, token, table_config):
             "isShowForm": "0",
             "isShowList": "1",
             "dictField": "bpm_status"
-        }
+        }, len(fields))
         fields.append(bpm_status_field)
         print(f'  [自动] 添加 bpm_status 字段（流程状态）')
     head = build_head(table_config)
@@ -468,7 +506,8 @@ def reorder_fields(api_base, token, reorder_config):
         return None
 
     fields.sort(key=lambda x: x['orderNum'])
-    sys_fields = [f for f in fields if f['dbFieldName'] in ('id', 'create_by', 'create_time', 'update_by', 'update_time', 'sys_org_code')]
+    id_field = next((f for f in fields if f['dbFieldName'] == 'id'), None)
+    sys_fields = [f for f in fields if f['dbFieldName'] in ('create_by', 'create_time', 'update_by', 'update_time', 'sys_org_code')]
     biz_fields = [f for f in fields if f['dbFieldName'] not in ('id', 'create_by', 'create_time', 'update_by', 'update_time', 'sys_org_code')]
 
     if 'move' in reorder_config:
@@ -516,8 +555,8 @@ def reorder_fields(api_base, token, reorder_config):
         biz_fields = new_biz
         print(f'  按指定顺序排列 {len(order_list)} 个字段')
 
-    # 重新编号
-    all_fields = sys_fields + biz_fields
+    # 最终顺序：id + 业务字段 + 系统字段（create_by/update_by 等）
+    all_fields = ([id_field] if id_field else []) + biz_fields + sys_fields
     for i, f in enumerate(all_fields):
         f['orderNum'] = i
 
@@ -544,8 +583,7 @@ def reorder_fields(api_base, token, reorder_config):
     # 展示结果
     print('\n当前字段顺序:')
     for f in all_fields:
-        if f['dbFieldName'] not in ('id', 'create_by', 'create_time', 'update_by', 'update_time', 'sys_org_code'):
-            print(f'  {f["orderNum"]:3d}  {f["dbFieldName"]:20s}  {f.get("dbFieldTxt", "")}')
+        print(f'  {f["orderNum"]:3d}  {f["dbFieldName"]:20s}  {f.get("dbFieldTxt", "")}')
 
     return head_id
 
@@ -652,20 +690,20 @@ def _addall_table(api_base, token, table_config):
             has_fk = any(f.get('mainTable') == main_table for f in table_config.get('fields', []))
             if not has_fk:
                 fk_name = f'{main_table}_id'
-                fk = make_field(order=1, db_name=fk_name, db_txt='主表ID',
+                fk = make_field(order=9999, db_name=fk_name, db_txt='主表ID',
                                 show_type='text', db_type='string', db_length=36,
                                 is_show_form='0', is_show_list='0',
                                 main_table=main_table, main_field=main_field)
-                fields.insert(0, fk)
+                fields.append(fk)
                 print(f'  [自动] 注入外键字段 {fk_name}（主表={main_table}, 主字段={main_field}）')
 
     if table_config.get('bpmForm', False):
-        fields.append({
+        fields.append(_make_field_from_config({
             "dbFieldName": "bpm_status", "dbFieldTxt": "流程状态",
             "fieldShowType": "list", "dbType": "string", "dbLength": 32,
             "fieldMustInput": "0", "isQuery": "0",
             "isShowForm": "0", "isShowList": "1", "dictField": "bpm_status"
-        })
+        }, len(fields)))
         print('  [自动] 添加 bpm_status 字段（流程状态）')
 
     head = build_head(table_config)

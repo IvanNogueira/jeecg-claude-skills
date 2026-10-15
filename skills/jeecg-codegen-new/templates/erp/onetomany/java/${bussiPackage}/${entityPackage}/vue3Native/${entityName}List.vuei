@@ -11,6 +11,7 @@
     <#assign need_multi = false>
     <#assign need_popup = false>
     <#assign need_popup_dict = false>
+    <#assign need_link_table = false>
     <#assign need_select_tag = false>
     <#assign need_select_tree = false>
     <#assign need_time = false>

@@ -28,7 +28,7 @@
         {"dbFieldName": "fimage",      "dbFieldTxt": "图片上传",   "fieldShowType": "image",          "dbType": "string",   "dbLength": 500},
         {"dbFieldName": "ffile",       "dbFieldTxt": "文件附件",   "fieldShowType": "file",           "dbType": "string",   "dbLength": 500},
         {"dbFieldName": "fumeditor",   "dbFieldTxt": "富文本",     "fieldShowType": "umeditor",       "dbType": "Text",     "dbLength": 0,   "fieldExtendJson": "{\"isOneRow\":true}"},
-        {"dbFieldName": "fmarkdown",   "dbFieldTxt": "Markdown",  "fieldShowType": "markdown",       "dbType": "Blob",     "dbLength": 0,   "fieldExtendJson": "{\"isOneRow\":true}"},
+        {"dbFieldName": "fmarkdown",   "dbFieldTxt": "Markdown",  "fieldShowType": "markdown",       "dbType": "Text",   "dbLength": 0, "fieldExtendJson": "{\"isOneRow\":true}"},
         {"dbFieldName": "fsel_user",   "dbFieldTxt": "用户选择",   "fieldShowType": "sel_user",       "dbType": "string",   "dbLength": 100},
         {"dbFieldName": "fsel_depart", "dbFieldTxt": "部门选择",   "fieldShowType": "sel_depart",     "dbType": "string",   "dbLength": 100},
         {"dbFieldName": "fpca",        "dbFieldTxt": "省市区",     "fieldShowType": "pca",            "dbType": "string",   "dbLength": 100},

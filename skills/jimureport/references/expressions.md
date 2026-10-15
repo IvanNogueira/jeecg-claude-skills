@@ -12,6 +12,8 @@
 | [expr-math-string.md](expr-math-string.md) | ABS / CEIL / ROUND / CNMONEY / CONCAT / UPPER 等 | — |
 | [expr-condition-style.md](expr-condition-style.md) | IF / CASE / IFERROR / COLOR / ROWCOLOR / INTVAL 等 | `create_expr2_condition_style.py` |
 | [expr-dynamic-cell.md](expr-dynamic-cell.md) | 动态CELL表达式（`::D5` 双冒号，循环列表自动替换行号）| — |
+| 内置函数（Aviator 通用） | assert / sysdate / now / rand / cmp / print / println / p / pst / 类型转换(long/double/boolean/str/bigint/decimal) / 类型工具(type/is_a/is_def/undef/identity) / 集合工具(range/tuple/comparator/max/min/constantly) | 见本文件「内置函数」节 |
+| Sequence 函数（集合处理） | repeat / map / filter / reduce / count / sort / distinct / take_while / drop_while / group_by / seq.list/set/map/keys/vals / 谓词工厂(seq.eq/gt/lt/and/or 等) | 见本文件「Sequence 函数」节 |
 
 ## 快速示例
 
@@ -267,14 +269,24 @@ JSON 数据集（db_type=3）无数据库连接，DBSUM 返回空，不报错但
 | `RAND()` | 随机数 [0, 1) | `=RAND()` |
 | `VAILD(n, d)` | 保留有效数据位数 | `=VAILD(3.456, 2)` |
 
-### Aviator math 模块（高级）
+### Aviator math 模块（高级，完整 14 个）
 
-```
-=math.sqrt(n)       平方根
-=math.pow(base, exp) 次方
-=math.log(n)        自然对数
-=math.sin/cos/tan(n) 三角函数
-```
+| 函数 | 说明 |
+|------|------|
+| `math.abs(d)` | 绝对值 |
+| `math.round(d)` | 四舍五入 |
+| `math.floor(d)` | 向下取整 |
+| `math.ceil(d)` | 向上取整 |
+| `math.sqrt(d)` | 平方根 |
+| `math.pow(d1, d2)` | d1 的 d2 次方 |
+| `math.log(d)` | 自然对数（以 e 为底） |
+| `math.log10(d)` | 常用对数（以 10 为底） |
+| `math.sin(d)` | 正弦 |
+| `math.cos(d)` | 余弦 |
+| `math.tan(d)` | 正切 |
+| `math.asin(d)` | 反正弦 |
+| `math.acos(d)` | 反余弦 |
+| `math.atan(d)` | 反正切 |
 
 ---
 
@@ -288,19 +300,22 @@ JSON 数据集（db_type=3）无数据库连接，DBSUM 返回空，不报错但
 | `CHAR(code)` | Unicode/ASCII 字符 | `=CHAR(65)` → A |
 | `CNMONEY(n)` | 数字转大写金额（人民币） | `=CNMONEY(1234.56)` |
 
-### Aviator string 模块（高级）
+### Aviator string 模块（高级，完整 12 个）
 
-```
-=string.length(s)              字符串长度
-=string.substring(s, start, end)  截取
-=string.indexOf(s, sub)        查找位置
-=string.contains(s, sub)       是否包含
-=string.startsWith(s, prefix)  是否以 prefix 开头
-=string.endsWith(s, suffix)    是否以 suffix 结尾
-=string.replace_all(s, regex, rep)  替换所有匹配
-=string.split(s, sep)          分隔
-=string.join(sep, list)        拼接集合
-```
+| 函数 | 说明 |
+|------|------|
+| `date_to_string(date, format)` | 把 Date 对象转成指定格式字符串 |
+| `string_to_date(source, format)` | 把指定格式字符串转成 Date 对象 |
+| `string.contains(s1, s2)` | s1 是否包含 s2 |
+| `string.length(s)` | 字符串长度 |
+| `string.startsWith(s1, s2)` | s1 是否以 s2 开头 |
+| `string.endsWith(s1, s2)` | s1 是否以 s2 结尾 |
+| `string.substring(s, begin, [end])` | 截取 s 从 begin 到 end（不含 end），end 省略则截到末尾 |
+| `string.indexOf(s1, s2)` | s2 在 s1 中起始索引，找不到返回 -1 |
+| `string.split(target, regex, [limit])` | 按正则分割 |
+| `string.join(seq, separator)` | 以 separator 连接集合元素 |
+| `string.replace_first(s, regex, replacement)` | 替换首个匹配 |
+| `string.replace_all(s, regex, replacement)` | 替换所有匹配 |
 
 ---
 
@@ -486,6 +501,161 @@ JSON 数据集（db_type=3）无数据库连接，DBSUM 返回空，不报错但
 | `=color()+fontbold()` | 不支持 `+` 组合两个函数 | 用 case 分支分别调用 |
 | `=IF(#{db.score}>=60,'及格','不及格')` | `=case(#{db.score}>=60,'及格','不及格')` | JimuReport 用 `case()`，不是 `IF()` |
 | `=case(#{db.sex}=='1','男','女')` | `=case('#{db.sex}'=='1','男','女')` | 字符串字段 `#{}` 外面必须加单引号 |
+
+---
+
+# 内置函数（Aviator 引擎，设计器「内置函数」分类完整列表）
+
+**官方文档**：https://jimureport.com/docs/function/library
+
+Aviator 引擎自带的底层工具函数，日常表达式很少全用，主要用于开发调试 / 类型转换 / 集合操作。
+
+## A. 调试 / 打印
+
+| 函数 | 说明 | 预览页效果 |
+|------|------|----------|
+| `assert(predicate, [msg])` | 断言，predicate 为 false 时抛 AssertFailed 异常，msg 为可选错误信息 | 通过返回空；不通过抛异常 |
+| `print([out], obj)` | 打印对象到 out 流（默认 System.out） | 预览页**不显示**，JVM 控制台才看得到 |
+| `println([out], obj)` | 同 print 但末尾自动换行 | 同上 |
+| `p([out], obj)` | print 的简写别名 | 同上 |
+| `pst([out], e)` | 打印异常堆栈，等价于 `e.printStackTrace()`，默认输出到 System.err | 同上 |
+
+## B. 时间 / 随机数
+
+| 函数 | 说明 |
+|------|------|
+| `now()` | 返回当前时间毫秒数（= `System.currentTimeMillis()`） |
+| `sysdate()` | 返回当前 java.util.Date 对象；⚠️ 不推荐，部分日期函数不兼容，统一用 `NOWSTR()` |
+| `rand()` | 返回 [0, 1) 之间的随机数（double） |
+| `rand(n)` | 返回 [0, n) 之间的随机整数（long） |
+
+## C. 类型转换
+
+| 函数 | 说明 |
+|------|------|
+| `long(v)` | 转为 long |
+| `double(v)` | 转为 double |
+| `boolean(v)` | 转为 boolean（除 nil / false 外都是 true） |
+| `str(v)` | 转为 string（nil/Java null 会变成字符串 `'null'`） |
+| `bigint(x)` | 转为 bigint |
+| `decimal(x)` | 转为 decimal（高精度） |
+
+## D. 类型工具
+
+| 函数 | 说明 | 示例 |
+|------|------|------|
+| `type(x)` | 返回 x 的类型名字符串，如 string / long / double / function | `=type(3)` → "long" |
+| `is_a(x, class)` | x 是否是 class 的实例 | `=is_a("a", String)` |
+| `is_def(x)` | 变量 x 是否已定义（包括定义为 nil） | — |
+| `undef(x)` | "遗忘"变量 x，已定义则取消定义 | — |
+| `identity(v)` | 原样返回参数 v，常用于配合 seq 高阶函数 | — |
+
+## E. 集合 / 比较工具
+
+| 函数 | 说明 |
+|------|------|
+| `range(start, end, [step])` | 创建 [start, end) 整数范围，step 指定步长 |
+| `tuple(x1, x2, ...)` | 创建一个 Object[] 数组，元素即参数列表 |
+| `comparator(pred)` | 将谓词转为 java.util.Comparator，常用于 sort |
+| `max(x1, x2, ...)` | 多参数取最大值（注意不是单元格聚合的 MAX） |
+| `min(x1, x2, ...)` | 多参数取最小值 |
+| `constantly(x)` | 生成一个函数，无论参数怎么调用都返回 x |
+
+> ⚠️ `eval(script, [bindings], [cached])` 在文档中划掉，**已被安全禁用**，不可用。
+
+---
+
+# Sequence 函数（集合处理，完整列表）
+
+**官方文档**：https://jimureport.com/docs/function/library#sequence-函数集合处理
+
+处理数组 / List / Map / Set 等集合的高阶函数库，全部以 `seq.` 前缀或全局函数形式提供。
+
+## F1. 集合创建
+
+| 函数 | 说明 |
+|------|------|
+| `repeat(n, x)` | 把元素 x 重复 n 次组成 List |
+| `repeatedly(n, f)` | 调用函数 f 共 n 次，结果组成 List |
+| `seq.array(clazz, e1, e2, ...)` | 创建 clazz 类型的数组并填入元素 |
+| `seq.array_of(clazz, size1, size2, ...)` | 创建 clazz 类型的一维或多维数组，维度按 sizes 指定 |
+| `seq.list(p1, p2, ...)` | 创建 ArrayList 并填入参数 |
+| `seq.set(p1, p2, ...)` | 创建 HashSet |
+| `seq.map(k1, v1, k2, v2, ...)` | 创建 HashMap，参数偶数个，成对作为 key/value |
+| `seq.entry(key, value)` | 创建 Map.Entry，用于 map/filter 等 |
+
+## F2. 元素访问 / 修改
+
+| 函数 | 说明 |
+|------|------|
+| `seq.keys(m)` | 返回 map 的 key 集合 |
+| `seq.vals(m)` | 返回 map 的 value 集合 |
+| `seq.contains_key(m, key)` | map 是否含 key；数组/List 时检查 index 是否在范围内 |
+| `seq.add(coll, element)` | 集合追加元素（也支持 `seq.add(m, key, value)` 三参数版） |
+| `seq.put(coll, key, value)` | 类似 List.set，按位置/key 设置值 |
+| `seq.remove(coll, element)` | 从集合/map 移除元素/key |
+| `seq.get(coll, element)` | 从 list/数组/map 取值，list/数组用 index、map 用 key |
+| `into(to_seq, from_seq)` | 把 from 的元素逐个 add 到 to，返回最终的 to_seq |
+
+## F3. 高阶变换
+
+| 函数 | 说明 |
+|------|------|
+| `map(seq, fun)` | 对每个元素调用 fun，组成新集合 |
+| `filter(seq, predicate)` | 保留 predicate 为 true 的元素 |
+| `reduce(seq, fun, init)` | 累积 fun 作用到 init 和每个元素上 |
+| `take_while(seq, pred)` | 从头取 pred 为 true 的元素，收集成新集合 |
+| `drop_while(seq, pred)` | 丢弃 pred 为 true 的元素，返回剩余的 |
+| `group_by(seq, keyfn)` | 按 keyfn(x) 结果分类，返回 map |
+| `zipmap(keys, values)` | 按顺序映射 keys 和 values 成 HashMap |
+| `concat(seq1, seq2)` | 连接两个集合 |
+| `sort(seq, [comparator])` | 排序（仅数组/List） |
+| `reverse(seq)` | 逆序 |
+| `distinct(seq)` | 去重 |
+
+## F4. 集合判断
+
+| 函数 | 说明 |
+|------|------|
+| `count(seq)` | 返回集合大小（支持数组/字符串/range/List） |
+| `is_empty(seq)` | 等价 `count(seq)==0`；空或 nil 时返回 true |
+| `is_distinct(seq)` | 无重复元素时返回 true |
+| `include(seq, element)` | element 是否在 seq 中（Set 是 O(1)，其他 O(n)） |
+| `seq.every(seq, fun)` | 所有元素 fun 调用为 true 时返回 true |
+| `seq.not_any(seq, fun)` | 所有元素 fun 调用为 false 时返回 true |
+| `seq.some(seq, fun)` | 任一元素为 true 时立即返回该元素 |
+
+## F5. 预制谓词工厂
+
+返回一个谓词函数，常配合 filter / take_while 使用：
+
+| 函数 | 说明 |
+|------|------|
+| `seq.eq(value)` | 判断 == value |
+| `seq.neq(value)` | 判断 != value |
+| `seq.gt(value)` | 判断 > value |
+| `seq.ge(value)` | 判断 >= value |
+| `seq.lt(value)` | 判断 < value |
+| `seq.le(value)` | 判断 <= value |
+| `seq.nil()` | 判断 == nil |
+| `seq.exists()` | 判断 != nil |
+| `seq.and(p1, p2, ...)` | 多谓词全部 true 才 true |
+| `seq.or(p1, p2, ...)` | 任一谓词 true 即 true |
+
+## F6. 集合极值
+
+| 函数 | 说明 |
+|------|------|
+| `seq.min(coll)` | 集合最小值（元素需实现 Comparable） |
+| `seq.max(coll)` | 集合最大值（元素需实现 Comparable） |
+
+---
+
+> **实务建议**：
+> - 单元格表达式日常只用 A/B 中的几个常用调试函数 + NOWSTR/now
+> - 类型转换 C 在金额处理（decimal 高精度）中偶尔用
+> - Sequence 函数 F 系列在常规报表表达式里**几乎用不到**，是 Aviator 通用脚本能力的一部分
+> - 真正业务报表的主力依然是：单元格聚合 + 日期时间 + 字符串 + 条件判断 + 调色样式
 
 ---
 

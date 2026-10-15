@@ -1,6 +1,6 @@
 ---
 name: jimubi-dashboard
-description: Use when user asks to create/design a dashboard (仪表盘/看板), data kanban, or says "创建仪表盘", "生成仪表盘", "做一个仪表盘", "数据看板", "做一个看板", "创建看板", "数据面板", "统计看板", "运营看板", "create dashboard", "generate dashboard", "design dashboard", "data kanban", "KPI dashboard". Also triggers for QQY/敲敲云 mode dashboards: "敲敲云仪表盘", "低代码应用仪表盘", "应用内仪表盘", "给应用添加图表", mentions appId+tenantId in dashboard context. Also triggers when user describes dashboard/kanban requirements like "做一个运营数据看板" or mentions grid-layout data display like "统计系统数据". Make sure to use this skill for dashboards (仪表盘/看板) — NOT big screens (大屏), which use completely different positioning, styling, and component configurations.
+description: Use when user asks to create/design a dashboard (仪表盘/看板), data kanban, or says "创建仪表盘", "生成仪表盘", "做一个仪表盘", "数据看板", "做一个看板", "创建看板", "数据面板", "统计看板", "运营看板", "create dashboard", "generate dashboard", "design dashboard", "data kanban", "KPI dashboard". Also triggers when user describes dashboard/kanban requirements like "做一个运营数据看板" or mentions grid-layout data display like "统计系统数据". NOT for 敲敲云/QQY low-code app dashboards (use jeecg-lowcode-dashboard). Make sure to use this skill for dashboards (仪表盘/看板) — NOT big screens (大屏), which use completely different positioning, styling, and component configurations.
 ---
 
 # JeecgBoot 仪表盘 AI 自动生成器
@@ -37,8 +37,6 @@ description: Use when user asks to create/design a dashboard (仪表盘/看板),
 
 | 场景 | 读取文件 |
 |------|---------|
-| **敲敲云（QQY）低代码应用仪表盘** | 核心规则已内联（识别条件/初始化/必填字段/工作流）；完整 config 模板/UI组件配置/批量生成/按钮操作 → 读取 `references/qqy-guide.md` |
-| **QQY全组件仪表盘（30统计图表+7UI，一次生成）** | 直接用 `gen_qqy_all_comps.py`（**无需 Write 脚本**）：`SKILL_REFS="$HOME/.claude/skills/jimubi-dashboard/references"; PYTHONIOENCODING=utf-8 PYTHONPATH="$SKILL_REFS:$SKILL_REFS/scripts" py "$SKILL_REFS/scripts/gen_qqy_all_comps.py" API_BASE TOKEN --page-id PAGE_ID --app-id APP_ID --tenant-id TENANT_ID --form-code FORM_CODE [--form-name 表单名称] [--form-type design\|online]` |
 | 需要示例/演示数据（用户未提供数据源）| `references/api-dataset-examples.md`（92条公开 mock API，按行业分类，直接用 `dataset_ops.py create-api` 创建） |
 | 创建/绑定/修改数据集（SQL/API/文件）| `references/dataset-guide.md`（**仅自定义脚本时需要**；使用预置脚本时**无需读取**） |
 | **多文件数据集（FILES）+ 图表** | 直接用 `files_ops.py create-bind`（**无需 Write 脚本**） |
@@ -156,29 +154,6 @@ PYTHONIOENCODING=utf-8 PYTHONPATH="$SKILL_REFS:$SKILL_REFS/scripts" py "$SKILL_R
 - **⚠️ 批量绑定数据集时 dataMapping.filed 写成字段名**（`filed` 是语义槽位标签"维度"/"数值"/"分组"，`mapping` 才是字段名）
 - **⚠️ dataMapping 按数组索引顺序映射而非语义映射**（必须按语义显式指定：单系列 `[{维度→name},{数值→value}]`，多系列 `[{分组→type},{维度→name},{数值→value}]`）
 - **⚠️ 仪表盘 size 字段用栅格单位**（`config.size.width/height` 必须是像素：`width = w×75, height = h×11`）
-- **🚨 QQY全组件仪表盘需要从头 Write 脚本**（直接用 `gen_qqy_all_comps.py` 预置脚本，参数：`--page-id --app-id --tenant-id --form-code`，1轮完成，耗时<2s）
-- **🚨 QQY全组件生成前跳过字段确认直接执行脚本**（禁止！必须先查询表单字段，以表格列出并给出推荐配置（维度/数值/分组），等用户确认后再执行 gen_qqy_all_comps.py）
-- **⚠️ QQY dataType=4 组件缺少 compStyleConfig 或 analysis**（前端 `useChartBiz.ts` 读取这两个字段，缺少任意一个则 TypeError 白屏；必须包含 `compStyleConfig: {'summary': {'showTotal': False, 'showY': False, 'decimals': 0}}` + `analysis: {}`）
-- **⚠️ QQY filter 缺少 conditionFields 字段**（`filter` 对象必须包含 `conditionFields: []`，否则前端"设置"弹窗报错）
-- **🚨 QQY seriesType 作用域：只有 JPivotTable + 4个地图 需要非空数组，其余26个统计图表必须是 `[]`**（✅正确：非分组图表 `seriesType:[]`；JPivotTable/JAreaMap/JBubbleMap/JHeatMap/JBarMap 用 `[{"series":"1","type":"bar"},...]`；❌错误：所有图表统一填非空数组，会导致前端 `.map is not a function` 崩溃）
-- **⚠️ QQY 仪表盘类（JGauge/JColorGauge/JAntvGauge）nameFields 放了字符串字段**（仪表盘类 nameFields 必须为 `[]`，只有 valueFields）
-- **⚠️ QQY 散点图 nameFields 用字符串维度字段**（JScatter/JBubble 的 nameFields 必须是数值类型字段，否则散点图坐标轴无法渲染）
-- **🚨 QQY commonOption 作用域：只有 4 个地图类型需要，其余26个统计图表禁止包含**（✅正确：JAreaMap/JBubbleMap/JHeatMap/JBarMap 加 commonOption；❌错误：所有统计图表都加 commonOption，会引入不必要字段干扰渲染）
-- **🚨 QQY JHeatMap commonOption 正确值（来自参考JSON）**：`heat:{blurSize:20,pointSize:15,maxOpacity:1}`，`breadcrumb.textColor:'#000000'`，`areaColor:{color1:'#f7f7f7',color2:'#fcc02e'}`，`barColor:'#fff176'`，`barColor2:'#fcc02e'`，`inRange:{color:['#04387b','#467bc0']}`；❌错误：blurSize:13/pointSize:6/textColor:'#ffffff'/不同inRange配色
-- **🚨 QQY JHeatMap 四项强制要求**（① `visualMap.show:true`——false 时报 `Heatmap must use with visualMap`；② `visualMap.seriesIndex:[1]`——不是 [0]；③ `commonOption` 必须含 `heat` 字段，`blurSize:20,pointSize:15`；④ `geo.roam:true`）
-- **⚠️ QQY 地图 visualMap.seriesIndex 搞错**（JAreaMap→[0]show:false；JBubbleMap→[1]show:false；**JHeatMap→[1]show:TRUE**；JBarMap→[0]show:false）
-- **🚨 QQY option 坐标轴颜色禁用 #EEF1FA**（大屏暗色在白底仪表盘看不清；禁止写 axisLabel.color/textStyle.color 覆盖，用默认色）
-- **🚨 QQY JWordCloud/JTotalProgress option 必须为 `{title,card}` 只需 title+card，无坐标轴**（加坐标轴/series 反而崩溃）；**JRankingList 需要完整横向条形图 option**（`yAxis:{data:[],type:'category'}` + `xAxis:{type:'value'}` + `series:[{type:'bar'}]` + `grid:{containLabel:true}`，不能是 `{}`）
-- **🚨 QQY DoubleLineBar yAxis 必须是双数组**（`yAxis:[{type:'value'},{type:'value'}]`，单对象则第二轴缺失）
-- **🚨 QQY HorizontalBar 系 category 必须是 'HorizontalBar'**（JHorizontalBar/JRankingList/JTotalProgress 的 category 写 'Bar' 则方向/样式全错）
-- **🚨 QQY JPivotTable isGroup 必须为 True**（False 时透视表不渲染行列分组）
-- **🚨 QQY compStyleConfig showField 取值**：`'all'`=全部字段（用户选"全部"时），`'fieldName'`=指定字段，`''`=默认未选；**columnFreeze 必须为 False**（参考JSON权威）；headerFreeze/unilineShow/lineFreeze 为 True
-- **🚨 QQY option.card 必须含 headColor:'#FFFFFF'；option.title.text 必须设为组件显示名称**（缺 headColor 导致卡片头色异常；title.text 为空则图表无标题）
-- **🚨 QQY assistYFields/assistTypeFields 作用域：只有 JPivotTable + 4个地图 需要填充，其余26个统计图表必须是 `[]`**（✅正确：普通图表 `assistYFields:[]`；❌错误：所有图表统一填 [数值字段]）
-- **🚨 QQY JGauge 与 JColorGauge/JAntvGauge option 结构不同**：JGauge 需要 `series:[{min:0,data:[],max:100,axisTick:{lineStyle:{color:'#eee'},show:true},detail:{formatter:'{value}'},type:'gauge'}]`；JColorGauge/JAntvGauge 只需 `{title, card}`（无 series）
-- **🚨 QQY JBarMap geo 必须含 aspectScale:0.96 + areaColor:'#37805B' + roam:true**（来自参考JSON；其余地图 areaColor 为空字符串，JHeatMap/JBarMap roam:true，JAreaMap/JBubbleMap roam:false）
-- **🚨 QQY JPivotTable pivotTable 子配置必须动态包含所有 num_fields**（`controlList`/`unitList` 必须对每个数值字段建一个条目；只用 VAL[0] 则多值字段的汇总列缺失）
-- **🚨 QQY filterField 必须在表单字段前预置5个系统字段**（create_by/update_by/update_time/create_time/bpm_status，缺失则筛选面板不完整）
 
 ---
 
@@ -218,313 +193,6 @@ PYTHONIOENCODING=utf-8 PYTHONPATH="$SKILL_REFS:$SKILL_REFS/scripts" py "$SKILL_R
 用户必须提供：
 1. **API 地址**：JeecgBoot 后端地址（如 `https://api3.boot.jeecg.com`）
 2. **X-Access-Token**：JWT 登录令牌（从浏览器 F12 获取）
-
----
-
-## 敲敲云（QQY）仪表盘模式专题
-
-> **本章节专门处理低代码应用（敲敲云）模式下的仪表盘。** 如果用户只是做普通仪表盘，跳过本章节。
-
-### 识别条件（满足任一即进入 QQY 模式）
-
-- 用户提及"敲敲云"、"低代码应用"、"应用仪表盘"、"应用内仪表盘"
-- 用户提供了 `appId`（低代码应用 ID）和 `tenantId`（租户 ID）
-- 操作上下文是在低代码应用（`/myapp/{appId}/...` 路由）内的仪表盘
-- 用户说"给某应用创建仪表盘"、"在应用里加一个图表"
-
-### QQY 模式 vs 标准仪表盘核心区别
-
-| 特性 | 标准仪表盘 | QQY 仪表盘 |
-|------|-----------|-----------|
-| `isLowApp` | 前端标识，不存库 | 前端标识，不存库（**禁止写入数据库**，仅前端引擎据此切换至 DragEngineQqyun） |
-| 组件库来源 | `menuData` | `qqyMenuData`（不含 JBreakRing 等） |
-| 主要数据来源 | SQL/API 数据集（dataType=2） | 设计器/Online 表单（dataType=4） |
-| 额外前置条件 | 无 | **appId**（应用ID）+ **tenantId**（租户ID） |
-| HTTP 附加头 | 无 | `X-Low-App-ID: {appId}` + `X-Tenant-Id: {tenantId}` |
-| 仪表盘归属 | 系统级，无应用关联 | 应用级，`lowAppId` 字段关联到具体应用 |
-| 数据查询接口 | `getAllChartData` | `getTotalData`（QQY 统计表单数据）|
-| 数据集管理 | 前端可见 | 隐藏，用户不感知 |
-| 按钮操作 | 无特殊绑定 | 支持创建记录/打开视图/调用业务流程等 5 种 |
-
-### QQY 模式额外前置条件
-
-用户在标准前置条件基础上，**还必须提供**：
-3. **appId**（低代码应用 ID）：从页面 URL `/myapp/{appId}/...` 或应用管理中获取
-4. **tenantId**（租户 ID）：从系统设置→租户管理中获取，或询问用户
-
-> 若用户未提供 appId/tenantId，**必须先询问**，不得用占位符代替。
-
-### QQY 模式脚本初始化（强制）
-
-QQY 模式下所有脚本必须在 `init_api` 后立即设置额外请求头，**同时创建页面时必须在 body 中显式传入 `lowAppId`**，确保应用归属正确保存到数据库：
-
-```python
-import json, time
-import bi_utils
-
-API_BASE = '<api_base>'
-TOKEN = 'your-token'
-APP_ID = '应用ID'          # 低代码应用ID（必填）
-TENANT_ID = '1'            # 租户ID（必填）
-PAGE_ID = '已有页面ID'     # 或稍后调用 create_page 获取
-
-# QQY 模式初始化（必须设置 extra_headers）
-bi_utils.init_api(API_BASE, TOKEN, extra_headers={
-    'X-Low-App-ID': APP_ID,
-    'X-Tenant-Id': str(TENANT_ID),
-})
-```
-
-> **⚠️ 创建页面时必须在 body 中传 `lowAppId`（强制）：**
-> ```python
-> page_resp = bi_utils._request('POST', '/drag/page/add', data={
->     'name': '仪表盘名称',
->     'style': 'default',
->     'lowAppId': APP_ID,   # 必须显式传入，确保存库
->     # ❌ 禁止传 isLowApp：这是前端标识，不存数据库
-> })
-> ```
-> **标准仪表盘**创建时不传 `lowAppId`。
-
-> **证据**：`DragEngine.vue` onMounted 中执行 `localStorage.setItem(ConfigEnum.DRAG_APP_ID, props.lowAppId)`，请求拦截器 `request.js` 中：
-> `config.headers[ConfigEnum.LOW_APP_ID] = localStorage.getItem(ConfigEnum.DRAG_APP_ID)`
-> 后端 `OnlDragPageController.java`：`String lowAppId = TokenUtils.getLowAppIdByRequest(request)` → 写入 `onlDragPage.setLowAppId(lowAppId)`
-
-### QQY 仪表盘列表查询
-
-> **🚨 强制规则：用户未提供 appId 时，必须先询问，禁止自行猜测或遍历已知 appId**
->
-> 正确流程：
-> 1. 用户说"在某仪表盘中操作"但未给 appId → 先问："请提供该应用的 appId（可从浏览器 URL `/myapp/{appId}/...` 获取）"
-> 2. 拿到 appId 后，**优先通过应用菜单接口查找仪表盘**（可按名称精确定位 pageId）
-> 3. 确认 pageId 后再执行操作
-
-**✅ 推荐方式：通过应用菜单查找仪表盘（按名称定位 pageId）**
-
-```python
-# 查询应用菜单，按名称找到仪表盘的 pageId（menuUrl 字段）
-resp = bi_utils._request('GET', '/online/lowAppMenu/list',
-    params={'appId': APP_ID, 'pageSize': 100})
-records = resp.get('result', {}).get('records', []) or []
-for m in records:
-    # type='drag' 为仪表盘菜单项，menuUrl 即为 pageId
-    print(m['id'], m.get('type'), m.get('menuName'), m.get('menuUrl'))
-# 示例输出：
-# 2047251681335025666 | drag | 销量分析 | 1207230587321589760
-#                                 ↑名称      ↑这就是 PAGE_ID
-```
-
-**备用方式：通过 page/list 过滤（结果需二次验证 lowAppId）**
-
-```python
-# ⚠️ page/list 接口不精确过滤，返回结果混有其他应用页面，需手动校验 lowAppId
-result = bi_utils._request('GET', '/drag/page/list', params={
-    'lowAppId': APP_ID,
-    'pageNo': 1,
-    'pageSize': 50
-})
-pages = result.get('result', {}).get('records', [])
-# 必须二次过滤，排除 lowAppId 不匹配的页面
-pages = [p for p in pages if p.get('lowAppId') == APP_ID]
-for p in pages:
-    print(p['id'], p['name'])
-```
-
-### QQY 可用组件（快速参考）
-
-**统计图表（30个）**：JBar, JStackBar, JMultipleBar, JNegativeBar, JHorizontalBar, JRankingList, JTotalProgress, JLine, JArea, JMultipleLine, DoubleLineBar, JWordCloud, JPie, JRing, JRose, JFunnel, JPyramidFunnel, JRadar, JCircleRadar, JColorGauge, JGauge, JAntvGauge, JNumber, JScatter, JBubble, JPivotTable, JAreaMap, JBubbleMap, JHeatMap, JBarMap
-
-❌ 禁止添加：JDynamicBar, JMixLineBar, JSmoothLine, JProgress, JCommonTable, JList, JGrowCard, JFlyLineMap 等（不在 qqyMenuData 中）
-
-**UI/功能组件（7个）**：JCustomButton（按钮）, JText（文本）, JFilterQuery（查询条件）, JCarousel（轮播图，需绑定imgupload字段）, JDragEditor（富文本）, JIframe（嵌入URL）, JCurrentTime（实时日期）
-
-❌ 禁止添加：JTabs, JGrid, JImg, JCalendar, JWaitMatter, JRadioButton 等
-
-### dataType=4 必填字段（QQY 统计图表核心）
-
-每个 QQY 统计图表 config 必须包含：
-1. `dataType: 4` + `formType/formId/formName/tableName/appId/appType`
-2. `nameFields/valueFields/typeFields/sorts/filter/filterField`（含 `filter.conditionMode:"and"` + `filter.conditionFields:[]`）
-3. `compStyleConfig`（含 `summary/showUnit/assist` 完整结构）
-4. `analysis`（含 `showData:1, isRawData:True, showMode:1, trendType:'1'`）
-5. 笛卡尔坐标图：`option.series:[{type:'bar/line/scatter'}]` + xAxis/yAxis + grid
-6. `chart:{category,subclass,isGroup}` + `seriesType:[]`（JPivotTable/地图除外）
-
-> **完整 config 模板、UI组件配置、批量生成流程、按钮操作类型**：见 `references/qqy-guide.md`
-
-### QQY 仪表盘创建完整工作流
-
-```
-Step 1: 确认 appId + tenantId（必须询问用户）
-Step 2: 确认仪表盘名称
-Step 3: 在 bi_utils.init_api 中设置 extra_headers
-Step 4: 调用 /drag/page/add 创建页面，body 中必须显式传 lowAppId: APP_ID（不传 isLowApp）
-Step 5: 添加每个统计图表前，必须执行【四步询问流程】（见下方）
-Step 6: 将仪表盘菜单归入目标分组（见下方「QQY 仪表盘菜单归组」章节）
-Step 7: 创建完成后输出仪表盘 ID 和分享地址（格式：{前端域名}:{端口}/drag/share/{appId}/{pageId}）
-```
-
-### QQY 仪表盘菜单归组（创建后必须执行）
-
-QQY 仪表盘页面创建后，其对应的应用菜单项 `parentId` 默认为空（不在任何分组下），**必须手动调用接口将其归入目标分组**，否则在低代码应用侧边栏中无法在分组下看到该仪表盘。
-
-**Step 1：查询应用菜单，找到目标分组 ID**
-
-> ⚠️ 必须用 `appId` 参数过滤，用 `lowAppId` 参数无效（会返回所有应用的菜单）
-
-```python
-r = requests.get(f'{API_BASE}/online/lowAppMenu/list', headers=HEADERS,
-    params={'appId': APP_ID, 'pageSize': 100})
-records = r.json().get('result', {}).get('records', []) or []
-# 找 type='group' 的分组，以及 type='drag' 的仪表盘菜单项（parentId 为空即是待归组的）
-for m in records:
-    if m.get('appId') == APP_ID:
-        print(m['id'], m['type'], m['menuName'], m.get('parentId'))
-```
-
-**Step 2：调用 edit 接口设置 parentId**
-
-```python
-body = {
-    'id': MENU_ID,            # 仪表盘菜单项 ID（type='drag' 的那条）
-    'parentId': GROUP_ID,     # 目标分组 ID（type='group'）
-    'menuName': '仪表盘名称',
-    'type': 'drag',
-    'menuUrl': PAGE_ID,       # 仪表盘页面 ID
-    'appId': APP_ID,
-    'orderNum': 4,
-}
-r = requests.put(f'{API_BASE}/online/lowAppMenu/edit', headers=HEADERS, json=body)
-# {"success":true,"message":"编辑成功!"} 即为成功
-```
-
-> 注意：请求头必须包含 `X-Low-App-ID` 和 `X-Tenant-Id`，否则鉴权失败。
-
----
-
-### 🚨 QQY 统计图表四步询问流程（强制，每个统计图表都必须执行）
-
-每次在 QQY 仪表盘中添加**任意一个统计图表**（30个范围内），必须严格执行以下四步，**禁止自行假设表单或字段**：
-
-**Step 0：询问使用当前应用还是其他应用的表单**
-```
-询问用户："请问使用当前应用下的表单，还是其他应用下的表单？"
-- 当前应用 → 用当前 APP_ID 继续 Step A
-- 其他应用 → 询问"请提供应用名称或应用ID"，等待用户提供后继续
-```
-
-**Step A：同时查询普通表单和聚合表，分两组展示 → 询问用户选择**
-```python
-# 同时调用两个接口（携带 X-Low-App-ID 头）：
-GET /desform/api/list/options?appId={APP_ID}          # 普通设计器表单
-GET /drag/onlDragTableRelation/list?pageSize=20        # 聚合表
-
-# 向用户分两组展示（对应前端 FormSelectModal 两个 Tab）：
-# 【表单（普通）】
-# | formCode | 表单名称 | type |
-# | ding_dan_guan_li_oaf0 | 订单管理 | design |
-#
-# 【聚合表】
-# | id | 聚合表名称 | 类型标签 |
-# | 1207232765004226560 | [聚合] 测试 | aggregation |
-# （类型标签判断：relationForms.formType=='aggregation' → '[聚合工厂]'，否则 '[聚合]'）
-#
-# 询问："请问使用哪个表单？（请指明普通表单 / 聚合表）"
-# 等待用户选择后继续
-```
-
-**Step B：查询并展示字段 → 询问用户选择维度/数值字段**
-```python
-# 根据用户选择分两种情况：
-
-# ① 普通表单（type=design）：
-GET /desform/api/fields/{formCode}
-# result 是 dict，字段列表在 result['fields']
-# 跳过 file-upload 类型字段
-
-# ② 聚合表（type=aggregation）：
-GET /drag/onlDragTableRelation/getFields/{aggregationId}
-# result 直接是字段数组，计算字段格式：{"title":"总额","type":"number","value":"总额fc37c"}
-# 跳过 file-upload/imgupload/location 类型字段
-
-# 向用户展示字段列表（字段名 + 显示名 + 控件类型），询问：
-# "请选择要显示的字段：
-#  - 维度字段（nameFields，文字/选项类）
-#  - 数值字段（valueFields，数字/金额类）"
-# 等待用户确认后继续
-```
-
-**Step C：按用户选定的表单 + 字段，构建 dataType=4 完整 config 创建图表**
-
-普通表单与聚合表的 config 关键字段差异：
-
-| 字段 | 普通表单（design） | 聚合表（aggregation） |
-|------|-------------------|----------------------|
-| `type` | `'design'` | `'aggregation'` |
-| `formType` | `'design'` | `'design'`（保持不变） |
-| `formId` | formCode（如 `ding_dan_guan_li_oaf0`） | 聚合表 id（如 `1207232765004226560`） |
-| `tableName` | formCode | 聚合表 id（与 formId 相同） |
-| `formName` | 表单显示名 | `[聚合] 聚合表名`（如 `[聚合] 测试`） |
-| filterField 来源 | `/desform/api/fields/{formCode}` | `/drag/onlDragTableRelation/getFields/{id}` |
-
-聚合表 config 示例（以 JBar 为例）：
-```python
-comp_config = {
-    'dataType': 4,
-    'formType': 'design',              # 聚合表 formType 仍为 'design'
-    'formId': '1207232765004226560',   # 聚合表 id
-    'formName': '[聚合] 测试',
-    'tableName': '1207232765004226560',# 与 formId 相同
-    'type': 'aggregation',             # 🚨 关键区别：type='aggregation'
-    'appId': APP_ID,
-    'appType': 'current',
-    'nameFields': [{'fieldName': 'input_xxx', 'fieldTxt': '名称', 'fieldType': 'string',
-                    'widgetType': 'input', 'fieldShow': True, 'options': [], 'customDateType': ''}],
-    'valueFields': [{'fieldName': '总额fc37c', 'fieldTxt': '总额', 'fieldType': 'number',
-                     'widgetType': 'number', 'fieldShow': True, 'groupField': '', 'options': [], 'customDateType': ''}],
-    'typeFields': [], 'assistYFields': [], 'assistTypeFields': [], 'calcFields': [],
-    'seriesType': [],
-    'sorts': {'name': '', 'type': ''},
-    'filter': {'queryField': 'create_time', 'queryRange': 'all',
-               'conditionMode': 'and', 'conditionFields': [], 'customTime': []},
-    'filterField': SYSTEM_FIELDS + form_filter_fields,  # 系统字段 + 聚合表字段
-    'chart': {'category': 'Bar', 'subclass': 'JBar', 'isGroup': False},
-    'turnConfig': {'url': ''}, 'jsConfig': '', 'drillData': [],
-    'authFieldShowResult': [], 'timeOut': 0, 'chartData': '[]',
-    'background': '#FFFFFF', 'borderColor': '#E8E8E8',
-    'size': {'height': 385},
-    'compStyleConfig': DEFAULT_COMP_STYLE_CONFIG,
-    'analysis': DEFAULT_ANALYSIS,
-    'option': {
-        'card': {'title': '', 'size': 'default', 'headColor': '#FFFFFF',
-                 'textStyle': {'color': '#464646', 'fontSize': 16, 'fontWeight': 'bold'},
-                 'extra': '', 'rightHref': ''},
-        'title': {'show': True, 'text': '基础柱形图'},
-        'series': [{'type': 'bar'}],
-        'xAxis': {'type': 'category'},
-        'yAxis': {'type': 'value'},
-        'grid': {'top': 70, 'bottom': 60, 'left': 50, 'right': 30, 'containLabel': True},
-        'tooltip': {'trigger': 'axis'},
-        'legend': {'show': True},
-    },
-}
-```
-
-**禁止行为：**
-- ❌ 禁止跳过 Step 0，不询问应用来源直接查询当前应用表单
-- ❌ 禁止只展示普通表单，忽略聚合表（前端有两个 Tab，AI 流程必须还原）
-- ❌ 禁止自行推断"复用页面已有组件的表单"
-- ❌ 禁止跳过询问、直接用某个表单或字段
-- ❌ 即使应用只有一个表单，也要展示让用户确认
-- ❌ 禁止使用 dataType=1 静态数据兜底
-- ❌ 聚合表 filterField 禁止调用 /desform/api/fields，必须用 /drag/onlDragTableRelation/getFields/{id}
-
-**QQY 也支持 dataType=2（SQL/API 数据集），只需额外携带 appId/tenantId 头。**
-
-### QQY 模式不支持的功能
-
-- ❌ **水印**（仅大屏专有）
-- ❌ **JBreakRing、JPyramid3D 等大屏专属组件**（不在 qqyMenuData 中）
 
 ---
 
@@ -1068,59 +736,6 @@ PYTHONIOENCODING=utf-8 PYTHONPATH="$SKILL_REFS:$SKILL_REFS/scripts" py "$LINK_OP
 | `--mapping "value:age"` | `--mapping "value=age"` | 映射用 `=` 分隔，不是 `:` |
 | `--mapping "a=b c=d"` | `--mapping "a=b,c=d"` | 多个映射用逗号分隔 |
 
-### QQY dataType=4 图表钻取配置（标准流程，1轮完成）
-
-> **触发场景**：用户说"给敲敲云/应用仪表盘中的某图表增加钻取配置"
-
-**核心结论（验证来源：2026-04-17 实操）：**
-- QQY dataType=4 图表**同样使用 `drillData` 存钻取映射**，与 dataType=2 机制一致
-- `--mapping` 的 target 必须是 **nameFields[].fieldName**（表单字段的 model 值），不是 SQL 参数名
-- 点击图表后，前端用 `params.name`（ECharts 点击事件的 name）匹配 drillData，过滤到只显示对应 nameField 值的数据
-
-**标准执行步骤（共2轮）：**
-
-```
-步骤1：查询图表配置，取 nameFields[0].fieldName
-  SKILL_REFS="$HOME/.claude/skills/jimubi-dashboard/references"
-  PYTHONIOENCODING=utf-8 PYTHONPATH="$SKILL_REFS:$SKILL_REFS/scripts" py "$SKILL_REFS/scripts/comp_ops.py" list API_BASE TOKEN PAGE_ID
-  # 再用 py -c 取 config 中的 nameFields，读取 fieldName
-
-步骤2：写入钻取配置
-  PYTHONIOENCODING=utf-8 PYTHONPATH="$SKILL_REFS:$SKILL_REFS/scripts" py "$SKILL_REFS/scripts/linkage_ops.py" add-drill API_BASE TOKEN PAGE_ID \
-    --comp "图表名" --mapping "name=<nameFields[0].fieldName>"
-```
-
-**快速参考（直接取 nameFields[0].fieldName 写入 mapping 的命令）：**
-
-```bash
-# 一次性取 nameFields 字段名 + 写入钻取（推荐：合并为同一命令链）
-PYTHONIOENCODING=utf-8 py -c "
-import sys, json
-sys.path.insert(0, '.')
-import bi_utils
-bi_utils.init_api('API_BASE', 'TOKEN')
-page = bi_utils.query_page('PAGE_ID')
-tmpl = page.get('template', [])
-if isinstance(tmpl, str): tmpl = json.loads(tmpl)
-for comp in tmpl:
-    if comp.get('componentName') == '目标图表名':
-        cfg = comp.get('config', {})
-        if isinstance(cfg, str): cfg = json.loads(cfg)
-        nf = cfg.get('nameFields', [])
-        if nf: print('nameField:', nf[0]['fieldName'])
-        break
-"
-# 输出 nameField: input_xxxx_xxxx 后，直接执行：
-PYTHONIOENCODING=utf-8 PYTHONPATH="$SKILL_REFS:$SKILL_REFS/scripts" py "$SKILL_REFS/scripts/linkage_ops.py" add-drill API_BASE TOKEN PAGE_ID --comp "目标图表名" --mapping "name=input_xxxx_xxxx"
-```
-
-**⚠️ QQY 钻取的 mapping target 是表单字段名（不是语义名）：**
-
-| 图表数据类型 | mapping target 填什么 | 示例 |
-|------------|----------------------|------|
-| dataType=2（SQL数据集）| SQL FreeMarker 参数名（如 `year`、`category`）| `name=year` |
-| dataType=4（QQY表单）| nameFields[0].fieldName（表单字段 model）| `name=input_1772159072450_604010` |
-
 ### 快捷操作：link_ops.py（外部链接/自定义JS）
 
 **使用前准备：**
@@ -1417,8 +1032,6 @@ bi_utils._page_components[page_id].append(comp)
 预览地址（标准仪表盘）：
 {API_BASE}/drag/page/view/{id}
 
-分享地址（QQY 低代码应用仪表盘）：
-http://{前端域名}:{端口}/drag/share/{appId}/{pageId}
 ```
 
 ```bash
@@ -2598,76 +2211,17 @@ jtabs_comp = {
 | **🚨 联动端到端完整配置三要素（缺一不可）** | 创建带联动的图表对时，必须同时满足：① 联动源图表 `fieldOption` 用 `{value, label, text, show:'Y', type}` 格式（否则设置 UI 映射字段列为空）；② 目标数据集 SQL 含 FreeMarker：`<#if isNotEmpty(name)>AND col='${name}'</#if>`，且 `datasetParamList` 声明参数；③ 目标图表 `config.paramOption` 包含同名参数 `{paramName:'name',paramTxt:'...',paramType:'String',paramValue:''}`。三者不会互相检测，全部缺失时联动外观正常但点击无效果 |
 | **设计器表单端点** | 固定端点 `/desform/api/list/options`、`/desform/api/fields/{tableName}`，禁止盲猜 |
 | **Online表单 dataType=4** | 最易漏！漏写则 dataType=0，读不到表单数据 |
-| **🚨 X-Low-App-ID 必须是应用 ID，不是仪表盘页面 ID** | QQY URL 格式：`/myapp/{appId}/drag/{pageId}`，appId ≠ pageId！`X-Low-App-ID` 填 appId，`query_page` 传 pageId。用错后 `/desform/api/list/options` 返回空列表，极易误判为"无表单"。若用户只给一个 ID，必须问清是应用 ID 还是页面 ID，或请提供完整 URL |
-| **🚨 表单列表返回空时第一反应是检查 appId，禁止从现有组件推断表单** | 表单接口返回 `[]` 最常见原因：X-Low-App-ID 用了页面 ID。排查：① 验证 appId 是否正确 → ② 确认无误后告知用户。任何情况禁止自行决定使用哪个表单 |
-| **🚨 QQY dataType=4 必须包含 compStyleConfig + analysis** | 缺少或为 `{}` 时前端 `useEChartsNew.ts` 访问 `.summary.showTotal` / `.showUnit.position` 抛 TypeError 白屏。禁止写 `'compStyleConfig': {}`，必须用完整默认值对象（见"组件 config 结构（dataType=4）"章节） |
-| **🚨 修复 compStyleConfig 时用 `not cfg.get()` 而非 `not in`** | 空对象 `{}` 是 truthy 的 key，`'compStyleConfig' not in cfg` 为 False（不覆盖）。必须用 `if not cfg.get('compStyleConfig'):` 检测空值 |
 | **仪表盘组件颜色设置** | JPie/JRose/JLine/JArea/JMixLineBar 等组件颜色必须用 `option.customColor`，格式 `[{"color1":"#FF","color":"#FF"}]`，`option.color` 无效 |
 | **🚨 饼图/折线图等颜色禁止写在 config 顶层** | `cfg['customColor']`（config 顶层）前端不读取，颜色不生效。必须写在 `option.customColor`：`cfg['option']['customColor'] = [{"color":"#FF0000","color1":"#FF0000"},...]`。❌ 错误：`cfg['customColor'] = [...]`；✅ 正确：`cfg['option']['customColor'] = [...]` |
 | **api.jeecg.com 是 YApi 服务器** | 禁止对其尝试 JeecgBoot /sys/login，YApi 登录路径是 /api/user/login |
 | **组件默认背景色** | `config.background` 必须为 `#FFFFFF`（白色），禁止使用 `#FFFFFF00`（透明）或 `transparent` |
 | **坐标单位** | 仪表盘用**栅格**坐标（24列），不是像素 |
 | **总宽度限制** | 同行组件 w 之和 ≤ 24 |
-| **🚨 QQY dataType=4 filter 必须含 conditionFields** | 缺少 `filter.conditionFields` 导致 `common.ts:1657` 抛 `TypeError: Cannot read properties of undefined (reading 'forEach')`，同时设置弹窗无法打开。所有 dataType=4 组件 filter 必须写：`{'queryField': '', 'queryRange': 'all', 'conditionFields': []}` |
-| **🚨 QQY JBar/折线/散点等笛卡尔坐标图必须在 option 显式写 series 类型** | QQY dataType=4 的柱形/折线/面积/散点/条形图，若 `option` 中没有 `series: [{type: 'bar/line/scatter'}]`，ECharts 报 `Unknown series undefined`，图表只显示坐标轴不渲染数据。必须补充：`'series': [{'type': 'bar'}]`（或 line/scatter）+ `xAxis` + `yAxis` + `grid` |
-| **🚨 QQY isGroup 图表分组字段是 typeFields 而非 groupFields** | dataType=4 多系列/分组图表（JStackBar/JMultipleBar/JRadar/JPivotTable 等）的分组字段键名是 `typeFields`，不是 `groupFields`，写错则分组无效 |
 | **🚨 isLowApp 禁止写入数据库** | `isLowApp: True` 是前端引擎切换标识（DragEngineQqyun.vue 判断），不存数据库，创建/保存页面的 body 中禁止传此字段。`lowAppId` 才是数据库字段，必须在 body 中传 |
-| **🚨 QQY analysis 字段默认值错误** | 正确默认值：`{'showData': 1, 'isRawData': True, 'showMode': 1, 'isCompare': False, 'izTimeOut': False, 'showFields': [], 'trendType': '1', 'timeOut': 0}`。❌ 旧错误值：`isRawData=False, showMode=0, showData=0, trendType='mom'`——这些值会导致数据展示模式异常 |
-| **🚨 QQY filter 必须含 conditionMode:"and"** | `filter` 缺少 `conditionMode` 字段会导致筛选条件模式未定义，设置弹窗行为异常。正确完整结构：`{'queryField': 'create_time', 'queryRange': 'all', 'conditionMode': 'and', 'conditionFields': [], 'customTime': []}` |
-| **🚨 conditionFields 条目必须同时含 val + fieldValue + condition** | 通过 API 写入筛选条件时，conditionFields 每条必须包含：`val`（显示值）、`fieldValue`（后端实际查询值，缺少时条件不生效）、`condition`（条件类型枚举，如 `'4'`=包含/LIKE）。仅有 `val` 无 `fieldValue` 则查询不执行过滤。完整结构：`{'fieldName':'xxx','fieldTxt':'订单名称','fieldType':'string','widgetType':'input','rule':'LIKE','condition':'4','val':'华为','fieldValue':'华为','options':[],'fieldShow':True,'customDateType':''}` |
-| **🚨 QQY JFilterQuery 添加前必须询问用户三项信息** | 禁止直接 `comp_ops.py add JFilterQuery` 后结束。必须先询问：①联动哪几个图表（列出当前页面图表供选择）；②添加几个查询条件；③每个条件关联哪个字段。收集完信息后一次性配置完整 config。详见 `references/qqy-guide.md` 「QQY 查询条件完整配置流程」 |
-| **🚨 QQY JFilterQuery config 缺少 4 个必填字段** | `conditionFields`（顶层）/ `filter` / `linkageConfig` / `chartData`（JSON字符串）四个字段缺一不可。缺少任意一个：条件不显示 / 筛选面板报错 / 查询不触发刷新 / 前端解析失败。完整结构见 `references/qqy-guide.md` |
-| **🚨 QQY JFilterQuery chartData 必须是 JSON 字符串** | `chartData` 存储的是 `json.dumps([...])` 的字符串，不能是 Python list。写成 list 则前端 `JSON.parse` 失败，查询条件无法渲染 |
-| **🚨 QQY JFilterQuery conditionFields 必须在顶层和 filter 内各写一份** | `config.conditionFields` 和 `config.filter.conditionFields` 必须同时存在且内容相同。只写其中一处则另一处报 TypeError |
-| **🚨 QQY JFilterQuery 禁止修改目标图表** | 联动完全由 JFilterQuery 自身的 `linkageConfig` 驱动，目标图表（JBar/JLine等）无需添加 drillData 或任何修改 |
-| **🚨 QQY JFilterQuery relationChartList.options 需过滤类型 + 去除 dataType:null** | `/desform/api/fields` 返回的字段需过滤 `SKIP_TYPES`（file-upload/imgupload等），且删除 `options.dataType: null`（与前端参考JSON一致，否则字段对比异常） |
-| **🚨 QQY filterField 不能为空数组** | `filterField: []` 导致图表设置面板无可选筛选字段。必须填入表单所有字段，每条包含 `fieldShow: True`、完整 `options` 对象；系统字段（create_by/update_by/create_time/update_time/bpm_status）也要包含；日期字段加 `customDateType: '1'`，人员字段加 `customDateType: '3'` |
-| **🚨 QQY nameFields/typeFields 必须含 fieldShow:True** | 字段条目缺少 `fieldShow` 属性会导致字段在设置面板中不可见/不可操作。每个 nameFields/typeFields 条目必须加 `'fieldShow': True` |
-| **🚨 QQY valueFields 必须含 fieldShow:True + groupField:""** | valueFields 条目除 `fieldShow: True` 外还必须含 `'groupField': ''`，缺少 groupField 导致聚合分组配置失效 |
-| **🚨 QQY sorts 必须含 type:"" 字段** | `sorts: {'name': ''}` 不完整，必须写 `sorts: {'name': '', 'type': ''}`，缺少 type 字段导致排序设置面板异常 |
-| **🚨 QQY JPivotTable 缺 pivotTable 子配置 → "暂无数据"** | JPivotTable 没有 `pivotTable` 顶层配置对象时，透视表始终显示"暂无数据"。必须在 config 顶层加：`'pivotTable': {'columnSummary': {'controlList': [{'showName':'','show':True,'totalType':'sum','position':'2','key':'<值字段名>'}], 'name':'列汇总','location':'right'}, 'lineSummary': {'controlList':[...],'name':'行汇总','location':'bottom'}, 'unitList':[{'showName':'','unit':'','key':'<值字段名>'}], 'showLineCount':0,'showColumnCount':0,'showColumnTotal':False,'showLineTotal':False}` |
-| **🚨 QQY 地图组件缺 commonOption → 地图不加载** | JAreaMap/JBubbleMap/JHeatMap/JBarMap 的 config 顶层必须含 `commonOption`，缺失导致地图样式/颜色完全失效。必须加：`'commonOption': {'barSize':10,'gradientColor':False,'breadcrumb':{'drillDown':False,'textColor':'#000000'},'areaColor':{'color1':'#f7f7f7','color2':'#fcc02e'},'barColor':'#fff176','barColor2':'#fcc02e','inRange':{'color':['#04387b','#467bc0']}}` |
-| **🚨 QQY 地图 option geo 必须用旧版 ECharts 格式** | `handleMapWarn`（useEChartsMap.ts:1145）处理 `itemStyle.normal/emphasis` 嵌套格式；使用新版 `itemStyle.areaColor` 直接写法样式失效。正确格式：`'geo':{'top':30,'zoom':1,'roam':False,'itemStyle':{'normal':{'areaColor':'#f7f7f7','borderColor':'#b0b5c1','borderWidth':0.5},'emphasis':{'areaColor':'#fcc02e'}},'label':{'emphasis':{'show':True,'color':'#000'}}}` |
-| **🚨 QQY 地图 visualMap 必须含 seriesIndex** | ECharts 要求 heatmap series 必须有 visualMap 明确引用其 seriesIndex，否则报 `Heatmap must use with visualMap`。各类型 seriesIndex：JAreaMap→`[0]`(show:False)，JBubbleMap→`[1]`(show:False)，**JHeatMap→`[1]`(show:True)**，JBarMap→`[0]`(show:False)。缺 seriesIndex 或值错误→热力图崩溃 |
-| **🚨 QQY 所有4种地图 option 都必须含 area 字段** | 不仅 JBubbleMap，全部4种地图的 `config.option?.area?.markerType` 都会被读取作为 series[0].type；缺失→type=undefined→`[ECharts] Unknown series undefined`。必须加：`'area':{'markerType':'effectScatter','markerColor':'#DDE330','shadowBlur':10,'markerCount':5,'markerOpacity':1,'scatterLabelShow':False,'value':['china'],'name':['中国']}` |
-| **🚨 QQY 地图和表格 config 需要 seriesType/assistTypeFields/assistYFields** | JPivotTable、JAreaMap、JBubbleMap、JHeatMap、JBarMap 的 config 顶层缺少这3个字段会导致多系列/辅助轴配置失效。必须加：`seriesType:[{series:'1',type:'bar'},{series:'2',type:'bar'},{series:'',type:'bar'}]`；`assistTypeFields:[{fieldName:'create_time',fieldTxt:'创建时间',options:{},fieldType:'date',widgetType:'date',customDateType:'3'}]`；`assistYFields:[val_field_obj]` |
-| **🚨 QQY 地图 valueFields 必须用表单实际数值字段，非固定 record_count** | record_count 只是"计数"的一种指标，不是地图 valueFields 的固定值。地图 valueFields 应使用用户表单中的数值类型字段（num_fields 中的字段）；仅在表单无数值字段时才以 record_count 兜底 |
-| **🚨 QQY JPivotTable 透视表必须含 pivotTable 子配置** | 缺少 `pivotTable` 顶层配置时透视表始终"暂无数据"。必须动态从 valueFields 构建：`{'columnSummary':{'controlList':[{'showName':'','show':True,'totalType':'sum','position':'2','key':k}],'name':'列汇总','location':'right'},'lineSummary':{'controlList':[{'showName':'','show':True,'totalType':'sum','key':k}],'name':'行汇总','location':'bottom'},'unitList':[{'unit':'','numberLevel':'','position':'suffix','decimal':0,'key':k}],'showLineCount':0,'showColumnCount':0,'showColumnTotal':False,'showLineTotal':False}`；analysis 必须加 `compareType:''` |
-| **🚨 QQY 地图 option 不能为空 {}** | 地图 option 必须包含完整 `geo`/`area`/`series`/`visualMap` 结构，否则地图不渲染。最小可用结构（以 JAreaMap 为例）：`{'drillDown':False,'area':{'name':['中国'],'value':['china'],'markerType':'effectScatter','markerColor':'#DDE330','shadowBlur':10,'markerCount':5,'markerOpacity':1,'scatterLabelShow':False,'shadowColor':'#DDE330'},'geo':{'top':30,'zoom':1,'roam':False,'itemStyle':{'normal':{'areaColor':'#f7f7f7','borderColor':'#b0b5c1','borderWidth':0.5},'emphasis':{'areaColor':'#fcc02e'}},'label':{'emphasis':{'show':True,'color':'#000'}}},'series':[{'type':'map','map':'china','geoIndex':0,'data':[]}],'visualMap':{'min':0,'max':200,'type':'continuous','show':False,'calculable':True,'top':'bottom','left':'5%','seriesIndex':[0]}}` |
-| **🚨 QQY isGroup=true option 不能为空 {}** | `option: {}` 导致多系列图表不渲染柱体/线条。必须包含 `series: []`（空数组，非空对象）+ `grid`：`{'grid':{'top':90,'bottom':115},'series':[],'tooltip':{'trigger':'axis'}}`；JMultipleBar 的 series 可含样式提示：`[{'barWidth':15,'itemStyle':{'borderRadius':0}}]` |
-| **🚨 QQY isGroup=true + xAxis.data:[] 阻止 X 轴渲染** | 笛卡尔坐标 isGroup 图表（JStackBar/JMultipleBar/JMixLineBar/JMultipleLine 等）option 中若含 `xAxis: {'type':'category','data':[]}` 或 `yAxis: {'type':'category','data':[]}`，前端无法动态填充分类轴，X 轴永远为空。必须去掉 `data: []` 只写 `type`，或完全省略 xAxis/yAxis |
-| **🚨 QQY seriesType 作用域：只有 JPivotTable + 4个地图 填充非空数组** | 其余26个统计图表（包括 isGroup=True 的分组图表）`seriesType` 必须为 `[]`。只有 JPivotTable/JAreaMap/JBubbleMap/JHeatMap/JBarMap 用 `[{'series':'1','type':'bar'},{'series':'2','type':'bar'},{'series':'','type':'bar'}]` |
-| **🚨 QQY formName 必须精确匹配表单显示名** | `formName` 是表单显示名称（如"测试表单"），不是 formCode（如 jeecg_1111_vjav），写错不影响数据查询但会导致配置面板显示混乱。必须先查询确认表单名：`GET /desform/api/list/options?appId={APP_ID}` 取 label 字段 |
 | **🚨 /desform/api/fields result 是 dict 非 list** | `result` 结构：`{desformCode, titleField, desformName, id, fields:[...]}` —— 字段列表在 `result.get('fields', [])`，不可直接迭代 result。字段属性：`model`=字段名，`name`=显示名，`type`=控件类型（input/number/money/select/textarea/file-upload）。直接 `for f in fields_resp.get('result', []):` 会报 `AttributeError: 'str' object has no attribute 'get'` |
 | **🚨 设计器表单字段类型映射（必须小写）** | 控件类型→BI fieldType：input/textarea/select/radio/checkbox→`string`，number/money→`number`，date/datetime→`string`；❌ 大写 `String`/`Integer`/`Double` 与手工配置不一致，导致字段类型判断异常；`file-upload` 必须跳过（不能作维度/指标，强制加入 filterField 会导致前端解析报错） |
-| **🚨 QQY 聚合表 type/formId/tableName/字段接口与普通表单不同** | 聚合表（FormSelectModal Tab2）config 必须：`type:'aggregation'`（普通表单是 `'design'`）；`formId`/`tableName` 均填聚合表 id（`onlDragTableRelation.id`，不是 formCode）；`formName` 填 `[聚合] 名称`；字段必须调 `/drag/onlDragTableRelation/getFields/{id}`（result 是数组，计算字段格式 `{title,type,value}`），禁止调 `/desform/api/fields`；`formType` 仍为 `'design'` |
-| **🚨 QQY 统计图表表单选择必须先询问应用来源，再分两组展示普通表单+聚合表** | 添加任意统计图表前，Step 0 询问"当前应用还是其他应用"；Step A 同时调用 `/desform/api/list/options`（普通表单）和 `/drag/onlDragTableRelation/list`（聚合表），分两组展示让用户选择；Step B 根据类型调不同接口取字段。❌ 禁止只展示普通表单跳过聚合表 |
-| **🚨 QQY 30个统计图表必须绑定表单（dataType=4），且必须先询问用户选表单和字段** | QQY（敲敲云）模式下添加**任意统计图表**，必须执行三步询问流程（见「QQY 统计图表三步询问流程」章节）：**① 调用 `/desform/api/list/options?appId={APP_ID}` 列出表单 → 展示给用户，询问"使用哪个表单" → ② 调用 `/desform/api/fields/{formCode}` 列出字段 → 展示给用户，询问"选哪些维度字段和数值字段" → ③ 用用户选定的表单+字段构建 dataType=4 完整 config 创建组件**。❌ 禁止自行复用已有组件的表单信息；❌ 禁止跳过询问直接执行；❌ 即使只有一个表单也要展示确认；❌ 禁止 dataType=1 静态数据兜底。**例外（dataType=1）：JCustomButton/JText/JFilterQuery/JCarousel/JDragEditor/JIframe/JCurrentTime 这7个UI功能组件** |
-| **🚨 QQY 全组件不能用 dataType=1（静态数据）** | QQY 前端无论 dataType 是否为 4，`useEChartsNew.ts` 都会访问 `compStyleConfig.summary.showTotal`；`useDataSource.ts` 会访问 `filter.conditionFields`。用 dataType=1 但不加这些字段，同样报 TypeError 白屏。结论：QQY 仪表盘**统计图表**统一用 dataType=4；**JCustomButton 按钮组件例外，固定用 dataType=1** |
 | **🚨 JCustomButton 按钮组件 dataType 必须为 1** | JCustomButton 不走表单数据接口，`dataType` 必须为 `1`，禁止设为 `4`。用户已明确验证。 |
-| **🚨 operationType=3 的 customPage 必须是对象** | `customPage` 必须是 `{'label':'页面名','value':'pageId','key':'pageId'}`，禁止直接填 pageId 字符串，否则前端无法识别目标页面 |
-| **🚨 operationType=1/2/3/6 的 appInfo 必须是 `{'type':'current'}`** | 不能为 `null`；**仅 op4（打开链接）才填 `null`**；op6（调用业务流程）同样必须填 `{'type':'current'}` |
-| **🚨 bizParams/desformId 字段作用域** | `bizParams` 仅 op6 有；`desformId`（顶层）仅 op1/op2 有；op3/4 不要加这两个字段 |
-| **🚨 QQY 重新生成全组件时直接覆盖，无需逐个删除** | `query_page(PAGE_ID)` → `bi_utils._page_components[PAGE_ID] = []` → 循环 append 30 个新组件 → `save_page(PAGE_ID)`，一次保存替换全部旧组件。不要逐个调 delete API（耗时且复杂） |
-| **🚨 QQY option 坐标轴颜色禁用大屏暗色 #EEF1FA** | 仪表盘是白底亮色主题，`axisLabel.color:'#EEF1FA'` / `textStyle.color:'#EEF1FA'` 是大屏暗色，会导致坐标轴字体在白底上看不清。仪表盘 option 中**禁止写任何 axisLabel.color / textStyle.color 颜色覆盖**，使用默认色即可 |
-| **🚨 QQY JWordCloud/JTotalProgress option 只需 `{title, card}`，JRankingList 需要完整横向条形图 option** | JWordCloud/JTotalProgress 前端自渲染，只要 title+card，加坐标轴会报错。JRankingList 必须有：`yAxis:{data:[],type:'category'}` + `xAxis:{type:'value'}` + `series:[{type:'bar'}]` + `grid:{containLabel:true}`；option 不能为 `{}` |
-| **🚨 QQY DoubleLineBar yAxis 必须是双数组格式** | 双轴图需要两个 Y 轴，`yAxis` 必须写成数组：`[{"type":"value"},{"type":"value"}]`，不能是单对象。写成单对象则第二轴缺失，图表渲染失败 |
-| **🚨 compStyleConfig.summary.showField 取值：'all'=全部字段，字段名=指定字段，''=未选（默认）** | 源码（CompStyleConfig.vue:438）`options.unshift({label:'全部', value:'all'})`，确认 `'all'` 是合法值，表示"显示全部字段"。用户请求"总计显示全部字段"时必须写 `'all'`，不能写 `''`。`''` 表示未选中状态（默认初始值），`'fieldName'` 表示仅显示指定字段。原规则"必须是 ''" 已废弃 |
 | **🚨 修改 JBar 柱体颜色必须同时更新 customColor 和 series[0].itemStyle.color** | 只设置 `option.customColor[0].color/color1` 不够——`option.series[0].itemStyle.color` 仍保留原色（如 `#64b5f6`），实际渲染以 itemStyle 为准导致颜色不变。必须同时更新两处：`option.customColor=[{color:'#FFD700',color1:'#FFD700'}]` + `option.series[0].itemStyle.color='#FFD700'` |
-| **🚨 QQY compStyleConfig freeze：headerFreeze/unilineShow/lineFreeze=True，columnFreeze=False** | 参考JSON权威值：`headerFreeze:True, unilineShow:True, lineFreeze:True, columnFreeze:False`。写 `columnFreeze:True` 与参考数据不符 |
-| **🚨 compStyleConfig.summary.totalType 取值：平均值必须是 'average' 非 'avg'** | 前端 `a-radio-button` 枚举：`'sum'`=求和、`'max'`=最大值、`'min'`=最小值、`'average'`=平均值。❌ 常见错误：写 `'avg'` 导致汇总方式无法生效（前端选中态丢失，实际计算仍走默认求和）。完整枚举：`totalType: 'sum' | 'max' | 'min' | 'average'` |
-| **🚨 QQY seriesType 禁止字符串，只有 JPivotTable+地图 用非空数组** | 禁止 `seriesType:'bar'/'line'` 字符串（`.map is not a function`）；其余26个统计图表必须是 `seriesType:[]`；只有 JPivotTable/JAreaMap/JBubbleMap/JHeatMap/JBarMap 用 `[{series:'1',type:'bar'},{series:'2',type:'bar'},{series:'',type:'bar'}]` |
-| **🚨 QQY commonOption 只有4个地图类型需要，其余统计图表禁止包含** | 26个非地图统计图表不应包含 `commonOption`；只有 JAreaMap/JBubbleMap/JHeatMap/JBarMap 在 config 顶层加 `commonOption` |
-| **🚨 QQY 地图 commonOption 各类型不同（来自参考JSON）** | JAreaMap/JBubbleMap：`{barSize:10,gradientColor:False,breadcrumb:{textColor:'#000000'},areaColor:{color1:'#f7f7f7',color2:'#fcc02e'},barColor:'#fff176',barColor2:'#fcc02e',inRange:{color:['#04387b','#467bc0']}}`；**JHeatMap** 加 `heat:{blurSize:20,pointSize:15,maxOpacity:1}`（blurSize:13/pointSize:6 是错误值）；JBarMap barSize=12 |
-| **🚨 QQY JHeatMap 四项强制要求（每次必查）** | ①`visualMap.show:True`（False→双重崩溃：`Heatmap must use with visualMap` + `a11.map is not a function`）；②`visualMap.seriesIndex:[1]`；③`geo.roam:True`；④`commonOption` 含 `heat:{blurSize:20,pointSize:15,maxOpacity:1}` |
-| **🚨 QQY JBarMap geo 必须含 aspectScale:0.96 + areaColor:'#37805B' + roam:True** | 参考JSON权威：`geo:{top:30,aspectScale:0.96,zoom:1,roam:True,itemStyle:{normal:{areaColor:'#37805B',...}},...}`；其余地图 areaColor 为 `''`（空字符串） |
-| **🚨 QQY HorizontalBar 系图表 category 必须是 'HorizontalBar'** | `JHorizontalBar` / `JRankingList` / `JTotalProgress` 的 `chart.category` 必须是 `'HorizontalBar'`，写 `'Bar'` 导致方向/样式完全错误 |
-| **🚨 QQY JPivotTable isGroup 必须为 True；option.title.text 固定写 '表格'** | isGroup=False 时行列分组不渲染；option 只需 `{title:{show:True,text:'表格'},card:{...}}`，text 不用组件名 |
-| **🚨 QQY assistYFields/assistTypeFields 只有 JPivotTable+4地图 填充，其余 `[]`** | 26个普通统计图表必须是 `assistYFields:[]`，`assistTypeFields:[]`；只有 JPivotTable/JAreaMap/JBubbleMap/JHeatMap/JBarMap 填充 `[val_field]` / `[create_time字段]` |
-| **🚨 QQY option.card 必须含 headColor:'#FFFFFF'；title.text 传组件显示名称** | 缺 `headColor` 导致卡片头颜色异常；`title.text:''` 空字符串则图表无标题 |
-| **🚨 QQY JGauge 与 JColorGauge/JAntvGauge option 结构不同** | JGauge 需要完整 `series:[{min:0,data:[],max:100,axisTick:{lineStyle:{color:'#eee'},show:True},detail:{formatter:'{value}'},type:'gauge'}]`；JColorGauge/JAntvGauge 只需 `{title,card}`（无series） |
-| **🚨 QQY JPivotTable pivotTable 必须包含所有 num_fields** | `columnSummary.controlList` / `lineSummary.controlList` / `unitList` 对每个数值字段建一个条目（用 `key:fieldName`），只用第一个值字段导致多值字段汇总列缺失 |
-| **🚨 QQY filterField 必须在表单字段前预置5个系统字段** | filterField 数组**开头必须先放5个系统字段**：`create_by(select-user)` / `update_by(select-user)` / `update_time(date)` / `create_time(date)` / `bpm_status(select,dictCode:bpm_status)`，再拼表单字段。缺少系统字段导致筛选面板看不到这些维度，联动过滤不完整 |
 | **🚨 JIframe URL 必须设置在 `config.option.body.url`，禁止设置 `config.option.url`** | JIframe 组件前端读取的地址字段是 `option.body.url`，`option.url` 是无效字段不会被渲染。用 `comp_ops.py edit --set` 时应写 `option.body.url=https://...`，禁止写 `option.url=https://...` |
 | **🚨 JTabs 不能用 comp_ops.py batch-add 创建** | JTabs 的 child 含动态 `parentId`（指向父 i），且每个子组件 config 结构复杂，CLI 无法表达。必须写自定义 Python 脚本（query_page → 过滤旧 JTabs → 构建新 JTabs → append → save_page）。见「JTabs 完整实操脚本」章节 |
 | **🚨 JGrid 不能用 comp_ops.py batch-add 创建** | JGrid 与 JTabs 同理，child 含动态 parentId 及完整子组件 config，CLI 无法表达。必须用自定义 Python 脚本（query_page → 缓存 template → 构建 JGrid → append → save_page）。见「JGrid 完整实操脚本」章节 |
@@ -2802,7 +2356,6 @@ PYTHONIOENCODING=utf-8 PYTHONPATH="$SKILL_REFS:$SKILL_REFS/scripts" py "$SKILL_R
 
 ### 按需读取的外部文件
 
-- `references/qqy-guide.md` — QQY 仪表盘完整参考（组件配置模板/dataType=4结构/批量生成/按钮操作）
 - `references/bi-comp-option-config.md` — 组件样式配置路径（上表未列出的组件时才读）
 - `references/bi-component-types.md` — 完整组件类型清单（skill.md 内联已覆盖常见类型）
 - `references/bi_utils.py` — 工具库源码

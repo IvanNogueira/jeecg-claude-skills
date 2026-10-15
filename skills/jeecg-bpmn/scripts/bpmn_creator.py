@@ -398,6 +398,12 @@ def gen_user_task(node):
         attrs += f' flowable:candidateGroups="{xml_escape(avalue)}"'
         group_type = assignee_cfg.get('groupType', 'role')
         attrs += f' flowable:groupType="{group_type}"'
+    elif atype == 'formData':
+        # 表单数据: candidateUsers + getUsersByFormData + groupType="formData"
+        # avalue = 字段model, fieldType 默认 'select-user'，可从 assignee_cfg 传入
+        field_type = assignee_cfg.get('fieldType', 'select-user')
+        attrs += f" flowable:candidateUsers=\"${{flowUtil.getUsersByFormData(execution,'{avalue}','{field_type}')}}\""
+        attrs += ' flowable:groupType="formData"'
 
     # 会签节点：覆盖 assignee 为 ${assigneeUserId}，追加 countersignRule 等属性
     cs = node.get('countersign')
@@ -423,7 +429,7 @@ def gen_user_task(node):
     else:
         same_mode = assignee_cfg.get('sameMode', 0)
 
-    multi_types = ('role', 'dept', 'deptPosition', 'approvalRole', 'position', 'candidateUsers', 'candidateUsersExpression', 'candidateGroups')
+    multi_types = ('role', 'dept', 'deptPosition', 'approvalRole', 'position', 'candidateUsers', 'candidateUsersExpression', 'candidateGroups', 'formData')
     skip_one = assignee_cfg.get('skipOne', atype in multi_types)
     empty_assigned = assignee_cfg.get('emptyAssignedByPrev', atype in multi_types)
 
